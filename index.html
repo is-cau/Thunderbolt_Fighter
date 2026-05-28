@@ -711,7 +711,7 @@ function startWave(num){
   GAME.currentWave=num;GAME.waveTimer=0;GAME.waveSpawnTimer=0.15;GAME.waveEnemyIndex=0;
   GAME.waveBossDef=wd.boss?{hp:wd.boss.hp*loopCount,score:wd.boss.score*loopCount}:null;
   GAME.waveBossSpawned=false;GAME.waveBossDead=false;
-  GAME.waveCleared=false;GAME.waveClearTimer=0;GAME.bossWarning=0;
+  GAME.waveCleared=false;GAME.waveClearTimer=0;GAME.bossWarning=0;GAME._waveEndTimer=0;
   GAME.wave=num;
   // Build spawn queue: halved delays, scaled counts
   let q=[];wd.enemies.forEach(g=>{const c=Math.floor(g.count*(0.8+loopCount*0.4));for(let e=0;e<c;e++)q.push({type:g.type,pattern:g.pattern,delay:Math.max(0.015,g.delay*0.25-loopCount*0.02)});});
@@ -728,11 +728,20 @@ function updateWaveSpawning(dt){
   const warmup=Math.min(1,GAME.waveTimer/10);
   const waveSpeed=1+GAME.wave*0.8; // Each wave adds 80% spawn speed
   if(GAME.waveEnemyIndex<q.length){GAME.waveSpawnTimer+=dt*warmup*waveSpeed;const e=q[GAME.waveEnemyIndex];if(GAME.waveSpawnTimer>=e.delay){GAME.waveSpawnTimer=0;spawnWaveEnemy(e);GAME.waveEnemyIndex++;}}
-  // Wave completion: all queued enemies spawned, no non-boss enemies alive
-  let nonBossAlive=false;for(let i=0;i<GAME.enemies.length;i++){const e=GAME.enemies[i];if(e.active&&e.type!=='boss'){nonBossAlive=true;break;}}
-  if(GAME.waveEnemyIndex>=q.length&&!nonBossAlive){
-    if(GAME.waveBossDef&&!GAME.waveBossSpawned&&GAME.bossWarning<=0){GAME.bossWarning=2;GAME.bossWarningTimer=2;playSound('bossWarning');}
-    else if(!GAME.waveBossDef||GAME.waveBossDead){GAME.waveCleared=true;GAME.waveClearTimer=0;}
+  // Wave completion
+  if(GAME.waveEnemyIndex>=q.length){
+    if(GAME.waveBossDef&&!GAME.waveBossSpawned){
+      // Boss wave: wait until no non-boss enemies alive, then trigger boss warning
+      let nonBossAlive=false;for(let i=0;i<GAME.enemies.length;i++){const e=GAME.enemies[i];if(e.active&&e.type!=='boss'){nonBossAlive=true;break;}}
+      if(!nonBossAlive&&GAME.bossWarning<=0){GAME.bossWarning=2;GAME.bossWarningTimer=2;playSound('bossWarning');}
+    }else if(GAME.waveBossDead){
+      // Boss killed: wave cleared
+      GAME.waveCleared=true;GAME.waveClearTimer=0;
+    }else if(!GAME.waveBossDef){
+      // No boss: auto-complete 3s after all queued enemies spawned
+      GAME._waveEndTimer=(GAME._waveEndTimer||0)+dt;
+      if(GAME._waveEndTimer>=3.0){GAME.waveCleared=true;GAME.waveClearTimer=0;GAME._waveEndTimer=0;}
+    }
   }
 }
 
@@ -795,7 +804,7 @@ function bossShoot(boss,phase){
     case'spread':for(let a=-2;a<=2;a++){const ang=Math.atan2(dy,dx)+a*0.2;mkBoss(bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd);}break;
     case'double':for(let a=-1;a<=1;a+=2){const ang=Math.atan2(dy,dx)+a*0.4;mkBoss(bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd);}break;
     case'ring':for(let i=0;i<16;i++){const a=i/16*Math.PI*2;mkBoss(bx,by,Math.cos(a)*140,Math.sin(a)*140);}break;
-    case'homing':for(let i=0;i<4;i++){const a=Math.atan2(dy,dx)+(i-1.5)*0.25;const b=mkBoss(bx,by,Math.cos(a)*100,Math.sin(a)*100);if(b){b._homing=true;b._homingLife=3.0;}}break;
+    case'homing':for(let i=0;i<4;i++){const a=Math.atan2(dy,dx)+(i-1.5)*0.25;const b=mkBoss(bx,by,Math.cos(a)*60,Math.sin(a)*60);if(b){b._homing=true;b._homingLife=3.0;}}break;
     case'wave':for(let i=0;i<10;i++){const a=-Math.PI/2+(i-4.5)*0.15;mkBoss(bx,by,Math.cos(a)*spd,Math.sin(a)*spd);}break;
     case'spiral':for(let i=0;i<20;i++){const a=i/20*Math.PI*2+GAME.time*3;mkBoss(bx,by,Math.cos(a)*(100+i*5),Math.sin(a)*(100+i*5));}break;
     case'burst':for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const b=mkBoss(bx,by,Math.cos(a)*80,Math.sin(a)*80);if(b){b._expanding=true;b._expandSpd=200;}}break;
@@ -806,7 +815,8 @@ function bossShoot(boss,phase){
 function onBossDeath(boss){
   spawnBossExplosion(boss.x,boss.y);playSound('bossDeath');
   GAME.bossActive=false;
-  for(let i=0;i<GAME.enemies.length;i++){if(GAME.enemies[i].active&&GAME.enemies[i].type!=='boss')GAME.enemies[i].active=false;} // Clear minions
+  for(let i=0;i<GAME.enemies.length;i++){if(GAME.enemies[i].active&&GAME.enemies[i].type!=='boss')GAME.enemies[i].active=false;}
+  for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false; // Clear all enemy bullets
   GAME.slowMotion=0.3;GAME.slowMotionTimer=1.5;
   for(let i=0;i<2;i++){const types=['spread','spread','spread','speed'];acquirePowerUp(boss.x-40+Math.random()*80,boss.y-10+Math.random()*40,types[Math.floor(Math.random()*types.length)]);}
   GAME.waveBossDead=true;
@@ -848,7 +858,7 @@ function triggerAutoEffect(eff){
   GAME.activeEffect=eff;
   let name='';
   switch(eff){
-    case'lightning':GAME.effectTimer=1.2;GAME.effectLightning=[];name='闪电链';break;
+    case'lightning':GAME.effectTimer=3.6;GAME.effectLightning=[];name='闪电链';break;
     case'sweep':GAME.effectTimer=2.0;name='神龙摆尾';break;
     case'burst':GAME.effectTimer=1.2;GAME._burstWave=0;GAME._burstNext=0;name='冲击波';break;
     case'meteor':GAME.effectTimer=4.0;GAME.effectMeteors=[];name='流星雨';break;
@@ -874,6 +884,10 @@ function updateLightning(dt){
   GAME.effectLightning=chain;
   // Apply instant damage to chained enemies (skip player at index 0)
   for(let i=1;i<chain.length;i++){chain[i].hp-=4*dt;spawnHitSparks(chain[i].x,chain[i].y,chain[i].x,chain[i].y);if(chain[i].hp<=0)onEnemyKilled(chain[i]);}
+  // Annihilate enemy bullets within lightning radius
+  for(let i=0;i<GAME.enemyBullets.length;i++){const b=GAME.enemyBullets[i];if(!b.active)continue;
+    for(let j=1;j<chain.length;j++){if(Math.sqrt((b.x-chain[j].x)**2+(b.y-chain[j].y)**2)<60){b.active=false;acquireParticle(b.x,b.y,0,0,COLORS.starYellow,3,0.2);break;}}
+  }
 }
 
 // 神龙摆尾 — sweeping beam bullets from player
