@@ -786,18 +786,19 @@ function updateBoss(boss,dt){
 
 function bossShoot(boss,phase){
   const p=GAME.player;if(!p||p.hp<=0)return;
-  const bx=boss.x,by=boss.y+30,dx=p.x-bx,dy=p.y-by,dist=Math.sqrt(dx*dx+dy*dy)||1;
+  const bx=boss.x,by=boss.y,dx=p.x-bx,dy=p.y-by,dist=Math.sqrt(dx*dx+dy*dy)||1;
   const spd=180+phase*30;
   const pat=boss._currentPattern||'aimed';
+  const mkBoss=function(x,y,vx,vy,dmg){const b=acquireBullet(GAME.enemyBullets,x,y,vx,vy,dmg||1);if(b){b._bossBullet=true;b.radius=6;b.w=b.h=12;}return b;};
   switch(pat){
-    case'aimed':acquireBullet(GAME.enemyBullets,bx,by,dx/dist*spd,dy/dist*spd,1);break;
-    case'spread':for(let a=-2;a<=2;a++){const ang=Math.atan2(dy,dx)+a*0.2;acquireBullet(GAME.enemyBullets,bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd,1);}break;
-    case'double':for(let a=-1;a<=1;a+=2){const ang=Math.atan2(dy,dx)+a*0.4;acquireBullet(GAME.enemyBullets,bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd,1);}break;
-    case'ring':for(let i=0;i<16;i++){const a=i/16*Math.PI*2;acquireBullet(GAME.enemyBullets,bx,by,Math.cos(a)*140,Math.sin(a)*140,1);}break;
-    case'homing':for(let i=0;i<4;i++){const a=Math.atan2(dy,dx)+(i-1.5)*0.25;const b=acquireBullet(GAME.enemyBullets,bx,by,Math.cos(a)*100,Math.sin(a)*100,1);if(b){b._homing=true;b._homingLife=3.0;}}break;
-    case'wave':for(let i=0;i<10;i++){const a=-Math.PI/2+(i-4.5)*0.15;acquireBullet(GAME.enemyBullets,bx,by,Math.cos(a)*spd,Math.sin(a)*spd,1);}break;
-    case'spiral':for(let i=0;i<20;i++){const a=i/20*Math.PI*2+GAME.time*3;acquireBullet(GAME.enemyBullets,bx,by,Math.cos(a)*(100+i*5),Math.sin(a)*(100+i*5),1);}break;
-    case'burst':for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const b=acquireBullet(GAME.enemyBullets,bx,by,Math.cos(a)*80,Math.sin(a)*80,1);if(b){b._expanding=true;b._expandSpd=200;}}break;
+    case'aimed':mkBoss(bx,by,dx/dist*spd,dy/dist*spd);break;
+    case'spread':for(let a=-2;a<=2;a++){const ang=Math.atan2(dy,dx)+a*0.2;mkBoss(bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd);}break;
+    case'double':for(let a=-1;a<=1;a+=2){const ang=Math.atan2(dy,dx)+a*0.4;mkBoss(bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd);}break;
+    case'ring':for(let i=0;i<16;i++){const a=i/16*Math.PI*2;mkBoss(bx,by,Math.cos(a)*140,Math.sin(a)*140);}break;
+    case'homing':for(let i=0;i<4;i++){const a=Math.atan2(dy,dx)+(i-1.5)*0.25;const b=mkBoss(bx,by,Math.cos(a)*100,Math.sin(a)*100);if(b){b._homing=true;b._homingLife=3.0;}}break;
+    case'wave':for(let i=0;i<10;i++){const a=-Math.PI/2+(i-4.5)*0.15;mkBoss(bx,by,Math.cos(a)*spd,Math.sin(a)*spd);}break;
+    case'spiral':for(let i=0;i<20;i++){const a=i/20*Math.PI*2+GAME.time*3;mkBoss(bx,by,Math.cos(a)*(100+i*5),Math.sin(a)*(100+i*5));}break;
+    case'burst':for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const b=mkBoss(bx,by,Math.cos(a)*80,Math.sin(a)*80);if(b){b._expanding=true;b._expandSpd=200;}}break;
   }
   playSound('enemyShoot');
 }
@@ -1302,7 +1303,18 @@ function drawPlayerBullet(ctx,x,y){
 
 function drawEnemyBullet(ctx,bullet){
   const x=bullet.x,y=bullet.y;
+  const sz=bullet._bossBullet?2:1;
   if(bullet._homing){
+    // Homing bullet: red with pulsing glow (boss size)
+    const rs=sz*8;const g=ctx.createRadialGradient(x,y,1,x,y,rs);g.addColorStop(0,rgba('#FF4444',0.9));g.addColorStop(0.5,rgba('#FF0000',0.6));g.addColorStop(1,rgba('#FF0000',0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,rs,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#FF8888';ctx.beginPath();ctx.arc(x,y,3.5*sz,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(x-0.5*sz,y-0.5*sz,1.2*sz,0,Math.PI*2);ctx.fill();
+  }else if(bullet._bossBullet){
+    // Boss bullet: larger with glow
+    const g=ctx.createRadialGradient(x,y,1,x,y,10);g.addColorStop(0,rgba(COLORS.hotPink,0.8));g.addColorStop(0.5,rgba(COLORS.hotPink,0.4));g.addColorStop(1,rgba(COLORS.hotPink,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();
+    const m=ctx.createRadialGradient(x-2,y-2,0.5,x,y,5);m.addColorStop(0,COLORS.white);m.addColorStop(0.3,COLORS.hotPink);m.addColorStop(1,COLORS.darkPink);ctx.fillStyle=m;ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(x-1,y-1,1.5,0,Math.PI*2);ctx.fill();
+  }else{
     // Homing bullet: red with pulsing glow
     const g=ctx.createRadialGradient(x,y,1,x,y,8);g.addColorStop(0,rgba('#FF4444',0.9));g.addColorStop(0.5,rgba('#FF0000',0.6));g.addColorStop(1,rgba('#FF0000',0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#FF8888';ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();
