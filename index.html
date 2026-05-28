@@ -166,6 +166,7 @@ const GAME = {
   activeEffect:null, effectDisplayName:'', effectTimer:0, // currently active effect
   effectLightning:[], effectMeteors:[], // effect data arrays
   _effectCooldowns:{lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0}, // per-effect cooldowns
+  _lightningBaseCooldown:1.0, // decreases by 0.1 each trigger
   // Wave tracking
   currentWave:0, waveSpawnQueue:[], waveSpawnTimer:0,
   waveEnemyIndex:0, waveBossDef:null, waveBossSpawned:false,
@@ -620,7 +621,6 @@ function updateComboTexts(dt){
 function updateEffects(dt){
   if(GAME.screenShakeDuration>0){GAME.screenShakeDuration-=dt;if(GAME.screenShakeDuration<=0){GAME.screenShake=0;GAME.screenShakeDuration=0;}}
   if(GAME.flashAlpha>0){GAME.flashAlpha-=dt*2;if(GAME.flashAlpha<0)GAME.flashAlpha=0;}
-  if(GAME.bossWarning>0){GAME.bossWarning-=dt;if(GAME.bossWarning<0)GAME.bossWarning=0;}
 }
 
 function updateSlowMotion(dt){
@@ -705,7 +705,6 @@ function startWave(num){
   for(let i=q.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[q[i],q[j]]=[q[j],q[i]];}
   GAME.waveSpawnQueue=q;
   if(typeof spawnComboText==='function')spawnComboText('第 '+num+' 波',CANVAS_W/2,400);
-  if(wd.boss){GAME.bossWarning=2;GAME.bossWarningTimer=2;playSound('bossWarning');}
 }
 
 function updateWaveSpawning(dt){
@@ -716,10 +715,10 @@ function updateWaveSpawning(dt){
   const warmup=Math.min(1,GAME.waveTimer/10);
   const waveSpeed=1+GAME.wave*0.8; // Each wave adds 80% spawn speed
   if(GAME.waveEnemyIndex<q.length){GAME.waveSpawnTimer+=dt*warmup*waveSpeed;const e=q[GAME.waveEnemyIndex];if(GAME.waveSpawnTimer>=e.delay){GAME.waveSpawnTimer=0;spawnWaveEnemy(e);GAME.waveEnemyIndex++;}}
-  const allSpawned=GAME.waveEnemyIndex>=q.length;
-  let alive=false;for(let i=0;i<GAME.enemies.length;i++){if(GAME.enemies[i].active){alive=true;break;}}
-  if(allSpawned&&!alive){
-    if(GAME.waveBossDef&&!GAME.waveBossSpawned){GAME.bossWarning=2;GAME.bossWarningTimer=2;playSound('bossWarning');}
+  // Wave completion: all queued enemies spawned, no non-boss enemies alive
+  let nonBossAlive=false;for(let i=0;i<GAME.enemies.length;i++){const e=GAME.enemies[i];if(e.active&&e.type!=='boss'){nonBossAlive=true;break;}}
+  if(GAME.waveEnemyIndex>=q.length&&!nonBossAlive){
+    if(GAME.waveBossDef&&!GAME.waveBossSpawned&&GAME.bossWarning<=0){GAME.bossWarning=2;GAME.bossWarningTimer=2;playSound('bossWarning');}
     else if(!GAME.waveBossDef||GAME.waveBossDead){GAME.waveCleared=true;GAME.waveClearTimer=0;}
   }
 }
@@ -727,7 +726,7 @@ function updateWaveSpawning(dt){
 function spawnWaveEnemy(entry){
   const x=40+Math.random()*(CANVAS_W-80);
   const e=acquireEnemy(x,-30,entry.type);if(!e)return;
-  const td=ENEMY_TYPES[entry.type];const scale=1+Math.floor(GAME.wave/5)*0.3; // HP scales every 5 waves
+  const td=ENEMY_TYPES[entry.type];const scale=1+(GAME.wave-1)*0.2; // HP +20% per wave
   if(td){e.hp=Math.ceil(td.hp*scale);e.maxHp=e.hp;e.speed=td.speed;e.scoreValue=Math.ceil(td.score*scale);e.w=e.h=td.size;e.radius=td.size/2;e.canShoot=td.canShoot;e.shootInterval=td.shootInterval;}
   e.pattern=entry.pattern;e.patternData={patternTimer:0,startX:x,startY:-30};e._shootTimer=Math.random()*e.shootInterval;
 }
@@ -738,7 +737,7 @@ function spawnWaveEnemy(entry){
 function spawnBoss(num){
   const e=acquireEnemy(CANVAS_W/2,-60,'boss');if(!e)return;
   const def=GAME.waveBossDef||{hp:200,score:5000};
-  e.hp=def.hp*5;e.maxHp=e.hp;e.w=80;e.h=56;e.radius=32;e.speed=50;
+  e.hp=def.hp*5;e.maxHp=e.hp;e.w=120;e.h=84;e.radius=50;e.speed=50;
   e.scoreValue=def.score;e.pattern='boss';e.canShoot=true;e.shootInterval=1.2;
   e.patternData={phase:1,moveDir:1,entered:false,_phaseMoveT:0,_sideT:0};e._shootTimer=0;
   GAME.waveBossSpawned=true;GAME.waveBossDead=false;
@@ -793,16 +792,14 @@ function updateAutoEffects(dt){
   // Decay per-effect cooldowns
   const cd=GAME._effectCooldowns;
   for(const k in cd)if(cd[k]>0)cd[k]-=dt;
-  GAME.autoEffectTimer-=dt;
-  if(GAME.autoEffectTimer<=0&&!GAME.activeEffect){
-    // Pick from available effects (cooldown expired)
+  // Auto-fire any skill whose cooldown is ready (immediately)
+  if(!GAME.activeEffect){
     const available=AUTO_EFFECTS.filter(e=>!cd[e]||cd[e]<=0);
-    if(available.length===0){GAME.autoEffectTimer=0.3;return;}
-    const eff=available[Math.floor(Math.random()*available.length)];
-    triggerAutoEffect(eff);
-    // Per-effect cooldown: lightning 2s, others 6-8s
-    cd[eff]=(eff==='lightning'?1:6+Math.random()*2);
-    GAME.autoEffectTimer=0.3;
+    if(available.length>0){
+      const eff=available[Math.floor(Math.random()*available.length)];
+      triggerAutoEffect(eff);
+      if(eff==='lightning'){cd[eff]=GAME._lightningBaseCooldown;GAME._lightningBaseCooldown=Math.max(0.1,GAME._lightningBaseCooldown*0.9);}else cd[eff]=6+Math.random()*2;
+    }
   }
   if(GAME.activeEffect){
     GAME.effectTimer-=dt;
@@ -875,16 +872,18 @@ function updateBurst(dt){
   }
 }
 
-// 流星雨 — falling fireballs
+// 流星雨 — fireballs shoot upward from player
 function updateMeteors(dt){
-  if(Math.random()<dt*15&&GAME.effectMeteors.length<20){
-    GAME.effectMeteors.push({x:Math.random()*CANVAS_W,y:-20,vx:(Math.random()-0.5)*100,vy:200+Math.random()*200,life:2});
+  const p=GAME.player;if(!p||!p.active)return;
+  if(Math.random()<dt*20&&GAME.effectMeteors.length<25){
+    const a=-Math.PI/2+(Math.random()-0.5)*1.0; // upward spread
+    GAME.effectMeteors.push({x:p.x,y:p.y-10,vx:Math.cos(a)*(300+Math.random()*400),vy:Math.sin(a)*(300+Math.random()*400),life:1.5});
   }
   for(let i=GAME.effectMeteors.length-1;i>=0;i--){
-    const m=GAME.effectMeteors[i];m.y+=m.vy*dt;m.x+=m.vx*dt;m.life-=dt;
-    if(m.y>CANVAS_H+30||m.life<=0){GAME.effectMeteors.splice(i,1);continue;}
-    for(let j=0;j<GAME.enemies.length;j++){const en=GAME.enemies[j];if(!en.active)continue;if(Math.sqrt((en.x-m.x)**2+(en.y-m.y)**2)<30){en.hp-=3;if(en.hp<=0)onEnemyKilled(en);m.life=0;break;}}
-    if(Math.random()<0.6)acquireParticle(m.x,m.y,-m.vx*0.1,-m.vy*0.1,COLORS.coral,2+Math.random()*3,0.3);
+    const m=GAME.effectMeteors[i];m.x+=m.vx*dt;m.y+=m.vy*dt;m.life-=dt;
+    if(m.y<-50||m.y>CANVAS_H+50||m.x<-50||m.x>CANVAS_W+50||m.life<=0){GAME.effectMeteors.splice(i,1);continue;}
+    for(let j=0;j<GAME.enemies.length;j++){const en=GAME.enemies[j];if(!en.active)continue;if(Math.sqrt((en.x-m.x)**2+(en.y-m.y)**2)<25){en.hp-=4;if(en.hp<=0)onEnemyKilled(en);m.life=0;break;}}
+    if(Math.random()<0.5)acquireParticle(m.x,m.y,-m.vx*0.05,-m.vy*0.05,COLORS.coral,2+Math.random()*3,0.25);
   }
 }
 
@@ -916,6 +915,7 @@ function updateSideShot(dt){
 let _ambientTimer=0;
 function updateAmbientSpawns(dt){
   if(GAME.bossActive||GAME.waveCleared||GAME.bossWarning>0)return;
+  if(GAME.waveBossDef&&!GAME.waveBossSpawned&&GAME.waveEnemyIndex>=GAME.waveSpawnQueue.length)return; // Waiting for boss
   _ambientTimer+=dt;
   // Ramp-up: slower first 10s, then ramps up
   const warmup=Math.min(1,GAME.waveTimer/10); // 0→1 over 10 seconds
@@ -933,17 +933,16 @@ function updateAmbientSpawns(dt){
     const x=Math.random()*CANVAS_W;
     const patterns=['straight','sine','zigzag','charge','circle'];
     const e=acquireEnemy(x,-30,t);if(!e)return;
-    const td=ENEMY_TYPES[t];if(td){e.hp=td.hp;e.maxHp=td.hp;e.speed=td.speed;e.scoreValue=td.score;e.w=e.h=td.size;e.radius=td.size/2;e.canShoot=td.canShoot;e.shootInterval=td.shootInterval;}
+    const td=ENEMY_TYPES[t];const sc=1+(GAME.wave-1)*0.2;if(td){e.hp=Math.ceil(td.hp*sc);e.maxHp=e.hp;e.speed=td.speed;e.scoreValue=Math.ceil(td.score*sc);e.w=e.h=td.size;e.radius=td.size/2;e.canShoot=td.canShoot;e.shootInterval=td.shootInterval;}
     e.pattern=patterns[Math.floor(Math.random()*patterns.length)];
     e.patternData={patternTimer:0,startX:x,startY:-30};e._shootTimer=Math.random()*e.shootInterval;
-    // Sometimes spawn 2-3 at once for density
     const groupChance=Math.min(0.9,(0.2+warmup*0.4)+GAME.wave*0.05); // Scales with wave
     if(Math.random()<groupChance){
       const groupSize=warmup<0.5?1:Math.min(6,2+Math.floor(GAME.wave/3)); // Grows with wave
       for(let s=0;s<groupSize;s++){
         const sx=Math.random()*CANVAS_W;const st=types[Math.floor(Math.random()*types.length)];
         const se=acquireEnemy(sx,-30-Math.random()*40,st);if(!se)continue;
-        const sd=ENEMY_TYPES[st];if(sd){se.hp=sd.hp;se.maxHp=sd.hp;se.speed=sd.speed;se.scoreValue=sd.score;se.w=se.h=sd.size;se.radius=sd.size/2;se.canShoot=sd.canShoot;se.shootInterval=sd.shootInterval;}
+        const sd=ENEMY_TYPES[st];const scl=1+(GAME.wave-1)*0.2;if(sd){se.hp=Math.ceil(sd.hp*scl);se.maxHp=se.hp;se.speed=sd.speed;se.scoreValue=Math.ceil(sd.score*scl);se.w=se.h=sd.size;se.radius=sd.size/2;se.canShoot=sd.canShoot;se.shootInterval=sd.shootInterval;}
         se.pattern=patterns[Math.floor(Math.random()*patterns.length)];se.patternData={patternTimer:0,startX:sx,startY:-30};se._shootTimer=Math.random()*se.shootInterval;
       }
     }
@@ -1004,6 +1003,7 @@ function startGame(){
   GAME._comboMilestonesHit={};GAME.slowMotion=1;GAME.slowMotionTimer=0;
   GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.effectLightning=[];GAME.effectMeteors=[];
   GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0};
+  GAME._lightningBaseCooldown=1.0;
   GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
   GAME.screenShake=0;GAME.screenShakeDuration=0;GAME.flashAlpha=0;GAME.comboTexts=[];
   for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false;
@@ -1220,7 +1220,7 @@ function drawStar5Path(ctx,cx,cy,outerR,innerR,rotation){
 }
 
 function drawBoss(ctx,x,y,hp,maxHp){
-  ctx.save();ctx.translate(x,y);ctx.scale(0.7,0.7);const t=GAME.time||0;const w=80,h=56;
+  ctx.save();ctx.translate(x,y);ctx.scale(1.6,1.6);const t=GAME.time||0;const w=80,h=56;
   if(hp!==undefined&&maxHp!==undefined)drawHpBar(ctx,0,-h/2-14,w*0.8,hp,maxHp);
   const dmgA=(hp&&maxHp&&hp<maxHp*0.5)?0.25+0.05*Math.sin(t*8):0;
   // Shadow
@@ -1364,6 +1364,33 @@ function drawComboTexts(ctx){
 
 function drawScreenFlash(ctx){
   if(GAME.flashAlpha>0){ctx.fillStyle=rgba(COLORS.white,GAME.flashAlpha);ctx.fillRect(0,0,CANVAS_W,CANVAS_H);}
+}
+
+function drawSkillCooldowns(ctx){
+  const skills=[
+    {name:'闪电链',key:'lightning',color:'#FFE156'},
+    {name:'神龙摆尾',key:'sweep',color:'#00D4FF'},
+    {name:'旋转爆射',key:'burst',color:'#FF6B8A'},
+    {name:'流星雨',key:'meteor',color:'#FF9AA2'},
+    {name:'散射弹幕',key:'scatter',color:'#B5EAD7'},
+    {name:'侧方射击',key:'sideShot',color:'#C7CEEA'},
+  ];
+  const barW=90,barH=6,gap=6,x0=CANVAS_W/2-((skills.length*barW+(skills.length-1)*gap)/2),y0=CANVAS_H-14;
+  skills.forEach((s,i)=>{
+    const sx=x0+i*(barW+gap);
+    const cd=GAME._effectCooldowns[s.key]||0;
+    const maxCd=s.key==='lightning'?GAME._lightningBaseCooldown:8;
+    const ratio=1-Math.min(1,cd/maxCd);
+    // Background
+    ctx.fillStyle='rgba(0,0,0,0.5)';roundRect(ctx,sx,y0,barW,barH,3);ctx.fill();
+    // Fill
+    if(ratio>0){ctx.fillStyle=s.color;roundRect(ctx,sx,y0,barW*ratio,barH,3);ctx.fill();}
+    // Border
+    ctx.strokeStyle=ratio>=1?'rgba(255,255,255,0.6)':'rgba(255,255,255,0.2)';ctx.lineWidth=0.5;roundRect(ctx,sx,y0,barW,barH,3);ctx.stroke();
+    // Label
+    ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='bold 8px "Segoe UI","Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    ctx.fillText(s.name,sx+barW/2,y0-2);
+  });
 }
 
 function drawBossWarning(ctx){
@@ -1513,7 +1540,7 @@ function render(){
   if(GAME.activeEffect==='sweep')drawSweepEffect(ctx);
   if(GAME.activeEffect==='meteor')drawMeteorEffect(ctx);
   // HUD
-  drawHUD(ctx);drawComboTexts(ctx);drawScreenFlash(ctx);drawBossWarning(ctx);
+  drawHUD(ctx);drawComboTexts(ctx);drawScreenFlash(ctx);drawBossWarning(ctx);drawSkillCooldowns(ctx);
   // Pause overlay
   document.getElementById('pause-overlay').style.display=GAME.gameState==='paused'?'flex':'none';
 }
