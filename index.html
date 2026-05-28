@@ -806,6 +806,7 @@ function bossShoot(boss,phase){
 function onBossDeath(boss){
   spawnBossExplosion(boss.x,boss.y);playSound('bossDeath');
   GAME.bossActive=false;
+  for(let i=0;i<GAME.enemies.length;i++){if(GAME.enemies[i].active&&GAME.enemies[i].type!=='boss')GAME.enemies[i].active=false;} // Clear minions
   GAME.slowMotion=0.3;GAME.slowMotionTimer=1.5;
   for(let i=0;i<2;i++){const types=['spread','spread','spread','speed'];acquirePowerUp(boss.x-40+Math.random()*80,boss.y-10+Math.random()*40,types[Math.floor(Math.random()*types.length)]);}
   GAME.waveBossDead=true;
@@ -942,7 +943,7 @@ function updateSideShot(dt){
 // Ambient enemy spawns between waves for roguelike non-stop action
 let _ambientTimer=0;
 function updateAmbientSpawns(dt){
-  if(GAME.bossActive||GAME.waveCleared||GAME.bossWarning>0||GAME.waveBossDead)return;
+  if(GAME.waveCleared||GAME.bossWarning>0||GAME.waveBossDead)return;
   if(GAME.waveBossDef&&!GAME.waveBossSpawned&&GAME.waveEnemyIndex>=GAME.waveSpawnQueue.length)return;
   _ambientTimer+=dt;
   // Ramp-up: slower first 10s, then ramps up
