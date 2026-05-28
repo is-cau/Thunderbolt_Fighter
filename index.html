@@ -760,7 +760,7 @@ function updateBoss(boss,dt){
   if(!boss||!boss.active)return;const pd=boss.patternData;
   pd.patternTimer=(pd.patternTimer||0)+dt;
   // Entry
-  if(!pd.entered){boss.y+=50*dt;if(boss.y>=100){boss.y=100;pd.entered=true;}return;}
+  if(!pd.entered){boss.y+=50*dt;if(boss.y>=100){boss.y=100;pd.entered=true;GAME.bossActive=true;}return;}
   const hpPct=boss.hp/boss.maxHp;
   let phase=hpPct>0.7?1:(hpPct>0.4?2:3);
   if(phase!==pd.phase){pd.phase=phase;pd._phaseMoveT=0;}
@@ -805,6 +805,7 @@ function bossShoot(boss,phase){
 
 function onBossDeath(boss){
   spawnBossExplosion(boss.x,boss.y);playSound('bossDeath');
+  GAME.bossActive=false;
   GAME.slowMotion=0.3;GAME.slowMotionTimer=1.5;
   for(let i=0;i<2;i++){const types=['spread','spread','spread','speed'];acquirePowerUp(boss.x-40+Math.random()*80,boss.y-10+Math.random()*40,types[Math.floor(Math.random()*types.length)]);}
   GAME.waveBossDead=true;
@@ -941,8 +942,8 @@ function updateSideShot(dt){
 // Ambient enemy spawns between waves for roguelike non-stop action
 let _ambientTimer=0;
 function updateAmbientSpawns(dt){
-  if(GAME.bossActive||GAME.waveCleared||GAME.bossWarning>0)return;
-  if(GAME.waveBossDef&&!GAME.waveBossSpawned&&GAME.waveEnemyIndex>=GAME.waveSpawnQueue.length)return; // Waiting for boss
+  if(GAME.bossActive||GAME.waveCleared||GAME.bossWarning>0||GAME.waveBossDead)return;
+  if(GAME.waveBossDef&&!GAME.waveBossSpawned&&GAME.waveEnemyIndex>=GAME.waveSpawnQueue.length)return;
   _ambientTimer+=dt;
   // Ramp-up: slower first 10s, then ramps up
   const warmup=Math.min(1,GAME.waveTimer/10); // 0→1 over 10 seconds
@@ -1031,7 +1032,7 @@ function startGame(){
   GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.effectLightning=[];GAME.effectMeteors=[];
   GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0};
   GAME._lightningBaseCooldown=1.0;
-  GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
+  GAME.bossActive=false;GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
   GAME.screenShake=0;GAME.screenShakeDuration=0;GAME.flashAlpha=0;GAME.comboTexts=[];
   for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false;
   for(let i=0;i<GAME.playerBullets.length;i++)GAME.playerBullets[i].active=false;
