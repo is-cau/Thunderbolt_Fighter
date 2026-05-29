@@ -118,7 +118,7 @@ canvas {
     <div class="subtitle">Thunderbolt Fighter</div>
     <canvas class="ship-preview" id="previewCanvas" width="80" height="80"></canvas>
     <button id="start-btn" onclick="handleStartClick()">START</button>
-    <div class="start-hint">鼠标移动 · 自动射击 · 自动间隔触发特殊效果 · P暂停</div>
+    <div class="start-hint" id="start-hint">鼠标移动 · 自动射击 · P暂停</div>
   </div>
   <!-- Game Over Screen -->
   <div id="gameover-screen">
@@ -404,16 +404,29 @@ function isDown(code){return!!keys[code];}
 function initInput(){
   document.addEventListener('keydown',onKD);document.addEventListener('keyup',onKU);
   const canvas=document.querySelector('canvas');if(!canvas)return;
-  // Mouse tracking
+  const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
+  // Mouse tracking (desktop)
   canvas.addEventListener('mousemove',e=>{
+    if(isMobile)return;
     const r=canvas.getBoundingClientRect();
     GAME.mouseX=(e.clientX-r.left)/r.width*CANVAS_W;
     GAME.mouseY=(e.clientY-r.top)/r.height*CANVAS_H;
     GAME.mouseOnCanvas=true;
   });
-  canvas.addEventListener('mouseleave',()=>{GAME.mouseOnCanvas=false;});
+  canvas.addEventListener('mouseleave',()=>{if(!isMobile)GAME.mouseOnCanvas=false;});
   // Click to start
   canvas.addEventListener('click',()=>{if(GAME.gameState==='start'||GAME.gameState==='gameover')handleStartClick();});
+  // Mobile joystick
+  if(isMobile){
+    document.getElementById('start-hint').textContent='摇杆移动 · 自动射击 · P暂停';
+    const joy=document.createElement('div');joy.id='m-joy';joy.style.cssText='position:fixed;bottom:30px;left:30px;width:130px;height:130px;border-radius:65px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);z-index:200;touch-action:none;';
+    const thumb=document.createElement('div');thumb.id='m-thumb';thumb.style.cssText='position:absolute;width:50px;height:50px;border-radius:25px;background:rgba(255,255,255,0.35);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;';
+    joy.appendChild(thumb);document.body.appendChild(joy);
+    let jId=null,jCX=0,jCY=0;
+    joy.addEventListener('touchstart',e=>{e.preventDefault();if(jId!==null)return;const t=e.changedTouches[0];jId=t.identifier;const r=joy.getBoundingClientRect();jCX=r.left+r.width/2;jCY=r.top+r.height/2;GAME.mobileDX=0;GAME.mobileDY=0;},{passive:false});
+    joy.addEventListener('touchmove',e=>{e.preventDefault();for(let i=0;i<e.changedTouches.length;i++){if(e.changedTouches[i].identifier===jId){const dx=e.changedTouches[i].clientX-jCX,dy=e.changedTouches[i].clientY-jCY;const maxR=55;let ndx=dx,ndy=dy,dist=Math.sqrt(dx*dx+dy*dy);if(dist>maxR){ndx=dx/dist*maxR;ndy=dy/dist*maxR;}GAME.mobileDX=ndx/maxR;GAME.mobileDY=ndy/maxR;GAME.mouseOnCanvas=true;const th=document.getElementById('m-thumb');if(th)th.style.transform='translate(calc(-50% + '+ndx+'px), calc(-50% + '+ndy+'px))';}}},{passive:false});
+    joy.addEventListener('touchend',e=>{for(let i=0;i<e.changedTouches.length;i++){if(e.changedTouches[i].identifier===jId){jId=null;GAME.mobileDX=0;GAME.mobileDY=0;GAME.mouseOnCanvas=false;const th=document.getElementById('m-thumb');if(th)th.style.transform='translate(-50%,-50%)';}}});
+  }
 }
 
 // ============================================================================
@@ -490,7 +503,7 @@ function onEnemyKilled(enemy){
   const et=enemy.type;
   spawnExplosion(enemy.x,enemy.y,et);playSound(et==='tank'?'bigExplode':(et==='fast'||et==='swarmer'?'smallExplode':'explode'));
   addScore(enemy.scoreValue||100);
-  if(Math.random()<0.25)maybeDropPowerUp(enemy.x,enemy.y);
+  if(Math.random()<0.35)maybeDropPowerUp(enemy.x,enemy.y);
   if(et==='boss')onBossDeath(enemy);
   // Splitter splits into 3 swarmers
   if(et==='splitter'){
@@ -537,12 +550,15 @@ function update(dt){
 
 function updatePlayer(dt){
   const p=GAME.player;if(!p||!p.active)return;
-  // Mouse-follow movement — fast direct tracking
+  // Mobile joystick or mouse-follow movement
   let mx=0,my=0;
-  if(GAME.mouseOnCanvas){
+  if((GAME.mobileDX||GAME.mobileDY)&&(GAME.mobileDX!==0||GAME.mobileDY!==0)){
+    mx=GAME.mobileDX;my=GAME.mobileDY;
+    let spd=(p.speed||550)*(p._speedBoost||1)*dt;
+    p.x+=mx*spd;p.y+=my*spd;
+  }else if(GAME.mouseOnCanvas){
     const dx=GAME.mouseX-p.x,dy=GAME.mouseY-p.y,dist=Math.sqrt(dx*dx+dy*dy);
     if(dist>2){mx=dx/dist;my=dy/dist;}
-    // Fast proportional speed — nearly instant for short distances
     let spd=Math.min(dist*14,750)*(p._speedBoost||1)*dt;
     if(spd>dist)spd=dist;
     p.x+=mx*spd;p.y+=my*spd;
@@ -997,7 +1013,7 @@ function updateAmbientSpawns(dt){
 // ============================================================================
 function maybeDropPowerUp(x,y){
   const roll=Math.random();let t;
-  if(roll<0.40)t='spread';else if(roll<0.50)t='shield';else if(roll<0.68)t='heal';else t='speed';
+  if(roll<0.35)t='spread';else if(roll<0.45)t='shield';else if(roll<0.75)t='heal';else t='speed';
   acquirePowerUp(x,y,t);
 }
 
