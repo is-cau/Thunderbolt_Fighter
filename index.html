@@ -906,10 +906,20 @@ function updateAutoEffects(dt){
     }
   }
   // Lightning runs independently (multiple concurrent chains)
+  // Collect enemies already claimed by other chains to avoid overlap
+  const claimedEnemies=new Set();
+  for(let i=0;i<GAME.lightningChains.length;i++){
+    const lc=GAME.lightningChains[i];
+    for(let j=1;j<lc.enemies.length;j++){if(lc.enemies[j]&&lc.enemies[j].active)claimedEnemies.add(lc.enemies[j]);}
+  }
   for(let i=GAME.lightningChains.length-1;i>=0;i--){
     const lc=GAME.lightningChains[i];lc.timer-=dt;
     if(lc.timer<=0){GAME.lightningChains.splice(i,1);continue;}
-    updateLightningChain(lc,dt);
+    // Remove this chain's own enemies from the claimed set so it can keep them
+    for(let j=1;j<lc.enemies.length;j++){if(lc.enemies[j])claimedEnemies.delete(lc.enemies[j]);}
+    updateLightningChain(lc,dt,claimedEnemies);
+    // Re-add this chain's enemies to claimed set
+    for(let j=1;j<lc.enemies.length;j++){if(lc.enemies[j]&&lc.enemies[j].active)claimedEnemies.add(lc.enemies[j]);}
   }
   // Other effects
   if(GAME.activeEffect){
@@ -942,10 +952,10 @@ function triggerAutoEffect(eff){
   if(audioReady){const t=audioCtx.currentTime;const f=eff==='bomb'?60:(eff==='burst'?600:400);const v=createVoice('triangle',f,0);if(v){v.g.gain.setValueAtTime(0.15,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+0.3);v.osc.stop(t+0.35);}}
 }
 
-// 闪电链 — per-chain update
-function updateLightningChain(lc,dt){
+// 闪电链 — per-chain update, claimedEnemies excludes enemies already in other chains
+function updateLightningChain(lc,dt,claimedEnemies){
   const p=GAME.player;if(!p||!p.active)return;
-  const enemies=GAME.enemies.filter(e=>e.active);if(enemies.length<1){lc.enemies=[];return;}
+  const enemies=GAME.enemies.filter(e=>e.active&&!claimedEnemies.has(e));if(enemies.length<1){lc.enemies=[p];return;}
   const chain=[p];let curr=p;
   for(let step=0;step<12;step++){
     let nearest=null,minD=350;
