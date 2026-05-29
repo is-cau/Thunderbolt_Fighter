@@ -119,9 +119,27 @@ canvas {
   #start-btn { padding:8px 35px; font-size:15px; }
   .start-hint { font-size:10px; margin-top:8px; }
 }
+/* 竖屏旋转提示 */
+@media (orientation: portrait) {
+  #game-wrapper { display:none; }
+  #rotate-hint { display:flex; }
+}
+#rotate-hint {
+  display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; height:100dvh;
+  z-index:999; background:#1A0A3E;
+  flex-direction:column; justify-content:center; align-items:center;
+  color:#FFE156; font-family:'Segoe UI','Microsoft YaHei',sans-serif;
+}
+#rotate-hint .rotate-icon { font-size:64px; animation:float 1.5s ease-in-out infinite; margin-bottom:20px; }
+#rotate-hint p { font-size:18px; letter-spacing:2px; text-shadow:0 0 15px rgba(255,225,86,0.5); }
 </style>
 </head>
 <body>
+<!-- 竖屏旋转提示 -->
+<div id="rotate-hint">
+  <div class="rotate-icon">📱↻</div>
+  <p>请旋转手机至横屏</p>
+</div>
 <div id="game-wrapper">
   <canvas id="gameCanvas" width="800" height="480"></canvas>
   <!-- Start Screen -->
@@ -1759,14 +1777,22 @@ function drawPreviewShip(){
 }
 
 // Click handlers
-function lockLandscape(){
+async function lockLandscape(){
   try{
-    if(document.documentElement.requestFullscreen){document.documentElement.requestFullscreen();}
-    else if(document.documentElement.webkitRequestFullscreen){document.documentElement.webkitRequestFullscreen();}
-    if(screen.orientation&&screen.orientation.lock){screen.orientation.lock('landscape').catch(()=>{});}
+    // 先请求全屏，必须 await 完成后才能锁定方向
+    const el=document.documentElement;
+    if(el.requestFullscreen){
+      await el.requestFullscreen().catch(()=>{});
+    }else if(el.webkitRequestFullscreen){
+      await el.webkitRequestFullscreen().catch(()=>{});
+    }
+    // 全屏后再锁定横屏
+    if(screen.orientation&&screen.orientation.lock){
+      await screen.orientation.lock('landscape').catch(()=>{});
+    }
   }catch(e){}
 }
-function handleStartClick(){initAudio();if(GAME.gameState==='start'||GAME.gameState==='gameover'){lockLandscape();startGame();}}
+function handleStartClick(){initAudio();if(GAME.gameState==='start'||GAME.gameState==='gameover'){lockLandscape().then(()=>{startGame();});}}
 function handleRestartClick(){restartGame();}
 
 // Canvas auto-scales via CSS (max-width:100vw, max-height:100vh, object-fit:contain)
