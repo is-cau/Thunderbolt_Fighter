@@ -550,17 +550,20 @@ function hitPlayer(dmg){
   GAME.player.hp-=dmg;GAME.player.invincible=2;GAME.combo=0;
   GAME.screenShake=8;GAME.screenShakeDuration=0.3;GAME.flashAlpha=0.35;
   spawnPlayerHitEffect(GAME.player.x,GAME.player.y);playSound('playerHit');
-  // 宇宙大爆发：HP降到3时触发神龙摆尾+冲击波+寒冰风暴+清场
-  if(GAME.player.hp===3&&!GAME._bigBangTriggered){
-    GAME._bigBangTriggered=true;
+  // 宇宙大爆发：HP降到5/3/1时触发神龙摆尾+冲击波+寒冰风暴+激光扫射
+  if(!GAME._bigBangTriggered)GAME._bigBangTriggered={};
+  const bbHp=GAME.player.hp;
+  if((bbHp===5||bbHp===3||bbHp===1)&&!GAME._bigBangTriggered[bbHp]){
+    GAME._bigBangTriggered[bbHp]=true;
     spawnComboText('宇宙大爆发!',CANVAS_W/2,CANVAS_H/2-30);
     GAME.screenShake=15;GAME.screenShakeDuration=0.6;GAME.flashAlpha=0.8;
-    // 强制触发神龙摆尾
-    if(!GAME.activeEffect||GAME.activeEffect==='sweep'){triggerAutoEffect('sweep');GAME._effectCooldowns.sweep=6;}
-    else{const prev=GAME.activeEffect;GAME.activeEffect=null;triggerAutoEffect('sweep');GAME._effectCooldowns.sweep=6;GAME.activeEffect=prev;}
-    // 同时触发冲击波
+    // 激光扫射作为主效果
+    triggerAutoEffect('laserSweep');GAME._effectCooldowns.laserSweep=6;
+    // 神龙摆尾并行触发
+    GAME.effectSweepActive=true;GAME.effectSweepTimer=2.0;
+    // 冲击波并行触发
     GAME._burstWave=0;GAME._burstNext=0;GAME.effectBurstActive=true;GAME.effectBurstTimer=1.2;
-    // 同时触发寒冰风暴（冰冻5秒+减速3秒）
+    // 寒冰风暴（冰冻5秒+减速3秒）
     triggerIceStorm();
     if(audioReady){const t=audioCtx.currentTime;const v=createVoice('sawtooth',30,0);if(v){v.g.gain.setValueAtTime(0.4,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+1.2);v.osc.frequency.linearRampToValueAtTime(120,t+0.6);v.osc.frequency.linearRampToValueAtTime(20,t+1.2);v.osc.stop(t+1.3);}}
   }
@@ -620,6 +623,7 @@ function update(dt){
   updateWaveSpawning(dt);updateSlowMotion(dt);updateComboTimer(dt);
   updateAmbientSpawns(dt);updateAutoEffects(dt);
   if(GAME.effectBurstActive){GAME.effectBurstTimer-=dt;updateBurst(dt);if(GAME.effectBurstTimer<=0)GAME.effectBurstActive=false;}
+  if(GAME.effectSweepActive){GAME.effectSweepTimer-=dt;updateSweep(dt);if(GAME.effectSweepTimer<=0)GAME.effectSweepActive=false;}
   checkPlayerDeath(dt);checkCollisions();
 }
 
@@ -984,7 +988,7 @@ function triggerAutoEffect(eff){
     case'scatter':GAME.effectTimer=3.0;name='散射弹幕';break;
     case'sideShot':GAME.effectTimer=3.0;name='侧方射击';break;
     case'iceStorm':GAME.effectTimer=2.0;name='寒冰风暴';triggerIceStorm();break;
-    case'laserSweep':GAME.effectTimer=3.0;GAME._laserSweepAngle=-70*Math.PI/180;name='激光扫射';break;
+    case'laserSweep':GAME.effectTimer=3.0;name='激光扫射';break;
   }
   GAME.effectDisplayName=name;
   spawnComboText(name,CANVAS_W/2,CANVAS_H/2-60);
@@ -1030,7 +1034,7 @@ function updateIceStorm(dt){
 // 神龙摆尾 — sweeping beam bullets from player
 function updateSweep(dt){
   const p=GAME.player;if(!p||!p.active)return;
-  const t=GAME.effectTimer||0;
+  const t=GAME.effectSweepActive?GAME.effectSweepTimer:(GAME.effectTimer||0);
   const angle=Math.sin(t*8)*Math.PI*0.6-Math.PI/2;
   for(let i=0;i<7;i++){
     const a=angle-Math.PI*0.25+i*Math.PI*0.083;
@@ -1091,46 +1095,37 @@ function updateSideShot(dt){
   }
 }
 
-// 激光扫射 — penetrating beam sweeps left→right→left, damages enemies & destroys bullets
-function updateLaserSweep(dt){
+// 激光扫射 — two beams start from left, rotate opposite directions
+function beamDamage(sweepAngle,dt){
   const p=GAME.player;if(!p||!p.active)return;
-  const progress=1-(GAME.effectTimer/3.0); // 0→1 over 3s
-  const sweepAngle=Math.sin(progress*Math.PI*2-Math.PI/2)*70*Math.PI/180; // -70°→+70°→-70°
-  GAME._laserSweepAngle=sweepAngle;
-  const beamLen=Math.sqrt(CANVAS_W*CANVAS_W+CANVAS_H*CANVAS_H); // screen diagonal
-  const ex=p.x+Math.sin(sweepAngle)*beamLen;
-  const ey=p.y-Math.cos(sweepAngle)*beamLen; // 0°=straight up
-  // Line segment A(p)→B(ex,ey), check all enemies for intersection
+  const beamLen=Math.sqrt(CANVAS_W*CANVAS_W+CANVAS_H*CANVAS_H);
+  const ex=p.x+Math.sin(sweepAngle)*beamLen,ey=p.y-Math.cos(sweepAngle)*beamLen;
   const ax=p.x,ay=p.y,bx=ex,by=ey;
   const abx=bx-ax,aby=by-ay,abLen2=abx*abx+aby*aby;
   // Damage enemies (penetrating)
   for(let i=0;i<GAME.enemies.length;i++){
     const en=GAME.enemies[i];if(!en.active)continue;
-    // Point-to-line-segment distance vs enemy radius
     let t=((en.x-ax)*abx+(en.y-ay)*aby)/abLen2;
     t=Math.max(0,Math.min(1,t));
     const cx=ax+t*abx,cy=ay+t*aby;
     const dist=Math.sqrt((en.x-cx)**2+(en.y-cy)**2);
-    if(dist<en.radius+8){ // beam width ~8px each side
-      en.hp-=5*dt;spawnHitSparks(en.x,en.y,cx,cy);
-      if(en.hp<=0)onEnemyKilled(en);
-    }
+    if(dist<en.radius+8){en.hp-=5*dt;spawnHitSparks(en.x,en.y,cx,cy);if(en.hp<=0)onEnemyKilled(en);}
   }
   // Destroy enemy bullets along beam
   for(let i=0;i<GAME.enemyBullets.length;i++){
     const b=GAME.enemyBullets[i];if(!b.active)continue;
     let t=((b.x-ax)*abx+(b.y-ay)*aby)/abLen2;
     t=Math.max(0,Math.min(1,t));
-    const cx=ax+t*abx,cy=ay+t*aby;
-    if(Math.sqrt((b.x-cx)**2+(b.y-cy)**2)<12){
-      b.active=false;acquireParticle(b.x,b.y,0,0,COLORS.starYellow,3,0.2);
-    }
+    if(Math.sqrt((b.x-(ax+t*abx))**2+(b.y-(ay+t*aby))**2)<12){b.active=false;acquireParticle(b.x,b.y,0,0,COLORS.starYellow,3,0.2);}
   }
-  // Screen shake & beam hum on sweep extremes
-  if(Math.abs(Math.sin(progress*Math.PI*2))>0.95&&Math.random()<0.3){
-    GAME.screenShake=Math.max(GAME.screenShake||0,2);
-    GAME.screenShakeDuration=Math.max(GAME.screenShakeDuration||0,0.08);
-  }
+}
+function updateLaserSweep(dt){
+  const p=GAME.player;if(!p||!p.active)return;
+  const progress=1-(GAME.effectTimer/3.0); // 0→1 over 3s
+  const angle1=-Math.PI/2+progress*2*Math.PI; // CW: left→top→right→bottom→left
+  const angle2=-Math.PI/2-progress*2*Math.PI; // CCW: left→bottom→right→top→left
+  GAME._laserSweepAngle1=angle1;GAME._laserSweepAngle2=angle2;
+  beamDamage(angle1,dt);beamDamage(angle2,dt);
 }
 
 // Ambient enemy spawns between waves for roguelike non-stop action
@@ -1183,7 +1178,11 @@ function maybeDropPowerUp(x,y){
 function applyPowerUp(pu){
   if(!pu||!pu.active)return;pu.active=false;playSound('powerUp');
   const p=GAME.player;if(!p)return;
-  if(p.hp>3)GAME._bigBangTriggered=false; // Reset big bang flag when healed above 3
+  // Reset big bang thresholds when healed above them
+  if(!GAME._bigBangTriggered)GAME._bigBangTriggered={};
+  if(p.hp>5)GAME._bigBangTriggered[5]=false;
+  if(p.hp>3)GAME._bigBangTriggered[3]=false;
+  if(p.hp>1)GAME._bigBangTriggered[1]=false;
   switch(pu.type){
     case'spread':p.powerLevel=3;p._spreadTimer=10;break;
     case'shield':p._baseMaxHp=p._baseMaxHp||10;p.maxHp=p._baseMaxHp+1;p.hp=Math.min(p.hp+1,p.maxHp);p._shieldTimer=15;break;
@@ -1230,7 +1229,7 @@ function startGame(){
   GAME._comboMilestonesHit={};GAME.slowMotion=1;GAME.slowMotionTimer=0;
   GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.lightningChains=[];GAME.effectLightning=[];GAME.effectMeteors=[];
   GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0,iceStorm:0,laserSweep:0};
-  GAME._lightningBaseCooldown=1.0;GAME.upgradeLevel=0;GAME._bigBangTriggered=false;GAME.effectBurstActive=false;
+  GAME._lightningBaseCooldown=1.0;GAME.upgradeLevel=0;GAME._bigBangTriggered={};GAME.effectBurstActive=false;GAME.effectSweepActive=false;
   GAME.bossActive=false;GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
   GAME.screenShake=0;GAME.screenShakeDuration=0;GAME.flashAlpha=0;GAME.comboTexts=[];
   for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false;
@@ -1746,47 +1745,52 @@ function drawMeteorEffect(ctx){
   }
 }
 
-// 激光扫射渲染 — thick glowing beam with energy particles along its length
-function drawLaserSweep(ctx){
+// 单束激光渲染
+function drawSingleBeam(ctx,angle,glowColor){
   const p=GAME.player;if(!p||!p.active)return;
-  const angle=GAME._laserSweepAngle||0;
   const beamLen=Math.sqrt(CANVAS_W*CANVAS_W+CANVAS_H*CANVAS_H);
   const ex=p.x+Math.sin(angle)*beamLen,ey=p.y-Math.cos(angle)*beamLen;
   const t=GAME.time||0;
-  ctx.save();
   // Outer glow
   const glow=ctx.createLinearGradient(p.x,p.y,ex,ey);
-  glow.addColorStop(0,'rgba(255,80,80,0)');glow.addColorStop(0.1,'rgba(255,60,60,0.3)');
-  glow.addColorStop(0.5,'rgba(255,30,30,0.5)');glow.addColorStop(0.9,'rgba(255,60,60,0.3)');
+  glow.addColorStop(0,'rgba(255,80,80,0)');glow.addColorStop(0.1,'rgba(255,60,60,0.25)');
+  glow.addColorStop(0.5,'rgba(255,30,30,0.4)');glow.addColorStop(0.9,'rgba(255,60,60,0.25)');
   glow.addColorStop(1,'rgba(255,80,80,0)');
-  ctx.strokeStyle=glow;ctx.lineWidth=24;ctx.shadowColor='#FF2222';ctx.shadowBlur=30;
+  ctx.strokeStyle=glow;ctx.lineWidth=18;ctx.shadowColor='#FF2222';ctx.shadowBlur=20;
   ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
   // Mid glow
   const mid=ctx.createLinearGradient(p.x,p.y,ex,ey);
-  mid.addColorStop(0,'rgba(255,180,180,0)');mid.addColorStop(0.1,'rgba(255,150,150,0.4)');
-  mid.addColorStop(0.5,'rgba(255,255,255,0.9)');mid.addColorStop(0.9,'rgba(255,150,150,0.4)');
+  mid.addColorStop(0,'rgba(255,180,180,0)');mid.addColorStop(0.1,'rgba(255,150,150,0.35)');
+  mid.addColorStop(0.5,'rgba(255,255,255,0.8)');mid.addColorStop(0.9,'rgba(255,150,150,0.35)');
   mid.addColorStop(1,'rgba(255,180,180,0)');
-  ctx.strokeStyle=mid;ctx.lineWidth=8;ctx.shadowColor='#FFFFFF';ctx.shadowBlur=15;
+  ctx.strokeStyle=mid;ctx.lineWidth=6;ctx.shadowColor='#FFFFFF';ctx.shadowBlur=10;
   ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
-  // Core beam
-  ctx.strokeStyle='rgba(255,255,255,0.95)';ctx.lineWidth=3;
-  ctx.shadowColor='#FFFFFF';ctx.shadowBlur=8;
+  // Core
+  ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2;
+  ctx.shadowColor='#FFFFFF';ctx.shadowBlur=5;
   ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
-  // Energy sparks along beam
+  // Sparks
   const segs=Math.floor(beamLen/30);
   for(let s=1;s<segs;s++){
-    const sx=p.x+(ex-p.x)*s/segs, sy=p.y+(ey-p.y)*s/segs;
-    if(Math.random()<0.3){
-      const sparkAlpha=0.5+Math.random()*0.5;
-      ctx.fillStyle=rgba('#FF8888',sparkAlpha);
-      ctx.beginPath();ctx.arc(sx+(Math.random()-0.5)*12,sy+(Math.random()-0.5)*12,1+Math.random()*2,0,Math.PI*2);ctx.fill();
+    const sx=p.x+(ex-p.x)*s/segs,sy=p.y+(ey-p.y)*s/segs;
+    if(Math.random()<0.2){
+      ctx.fillStyle=rgba('#FF8888',0.4+Math.random()*0.5);
+      ctx.beginPath();ctx.arc(sx+(Math.random()-0.5)*10,sy+(Math.random()-0.5)*10,1+Math.random()*1.5,0,Math.PI*2);ctx.fill();
     }
   }
+}
+// 激光扫射渲染 — dual beams from left, opposite rotation
+function drawLaserSweep(ctx){
+  const p=GAME.player;if(!p||!p.active)return;
+  ctx.save();
+  drawSingleBeam(ctx,GAME._laserSweepAngle1||0);
+  drawSingleBeam(ctx,GAME._laserSweepAngle2||0);
   // Origin burst at player
-  const ob=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,20);
-  ob.addColorStop(0,'rgba(255,255,255,0.9)');ob.addColorStop(0.3,'rgba(255,100,100,0.6)');
+  const t=GAME.time||0;
+  const ob=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,22);
+  ob.addColorStop(0,'rgba(255,255,255,0.9)');ob.addColorStop(0.2,'rgba(255,100,100,0.6)');
   ob.addColorStop(1,'rgba(255,0,0,0)');
-  ctx.fillStyle=ob;ctx.beginPath();ctx.arc(p.x,p.y,20+Math.sin(t*15)*3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=ob;ctx.beginPath();ctx.arc(p.x,p.y,22+Math.sin(t*15)*3,0,Math.PI*2);ctx.fill();
   ctx.shadowBlur=0;ctx.restore();
 }
 
