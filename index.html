@@ -678,7 +678,7 @@ function updateEnemies(dt){
     const e=GAME.enemies[i];if(!e.active)continue;
     if(e.type==='boss')updateBoss(e,dt);
     else{updateEnemyPattern(e,dt);updateEnemyShooting(e,dt);}
-    if(e.y>CANVAS_H+100||e.y<-100||e.x<-120||e.x>CANVAS_W+120){e.active=false;if(e.y>CANVAS_H+50)GAME.combo=0;}
+    if(e.y>CANVAS_H+60||e.y<-60||e.x<-60||e.x>CANVAS_W+60){e.active=false;if(e.y>CANVAS_H+10)GAME.combo=0;}
   }
 }
 
@@ -1152,7 +1152,7 @@ function updateAmbientSpawns(dt){
     if(GAME.wave>=8)types.push('tank','tank','splitter','splitter','swarmer','swarmer');
     if(GAME.wave>=12)types.push('tank','tank','tank','splitter','splitter','splitter');
     const t=types[Math.floor(Math.random()*types.length)];
-    const x=Math.random()*CANVAS_W;
+    const x=40+Math.random()*(CANVAS_W-80);
     const patterns=['straight','sine','zigzag','charge','circle'];
     const e=acquireEnemy(x,-30,t);if(!e)return;
     const td=ENEMY_TYPES[t];const sc=1+(GAME.wave-1)*0.2;if(td){e.hp=Math.ceil(td.hp*sc);e.maxHp=e.hp;e.speed=td.speed;e.scoreValue=Math.ceil(td.score*sc);e.w=e.h=td.size;e.radius=td.size/2;e.canShoot=td.canShoot;e.shootInterval=td.shootInterval;}
@@ -1162,7 +1162,7 @@ function updateAmbientSpawns(dt){
     if(Math.random()<groupChance){
       const groupSize=warmup<0.5?1:Math.min(7,2+Math.floor(GAME.wave/3));
       for(let s=0;s<groupSize;s++){
-        const sx=Math.random()*CANVAS_W;const st=types[Math.floor(Math.random()*types.length)];
+        const sx=40+Math.random()*(CANVAS_W-80);const st=types[Math.floor(Math.random()*types.length)];
         const se=acquireEnemy(sx,-30-Math.random()*40,st);if(!se)continue;
         const sd=ENEMY_TYPES[st];const scl=1+(GAME.wave-1)*0.2;if(sd){se.hp=Math.ceil(sd.hp*scl);se.maxHp=se.hp;se.speed=sd.speed;se.scoreValue=Math.ceil(sd.score*scl);se.w=se.h=sd.size;se.radius=sd.size/2;se.canShoot=sd.canShoot;se.shootInterval=sd.shootInterval;}
         se.pattern=patterns[Math.floor(Math.random()*patterns.length)];se.patternData={patternTimer:0,startX:sx,startY:-30};se._shootTimer=Math.random()*se.shootInterval;
