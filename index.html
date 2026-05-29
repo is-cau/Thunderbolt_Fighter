@@ -434,6 +434,7 @@ function initInput(){
   // Mobile joystick
   if(isMobile){
     document.getElementById('start-hint').textContent='摇杆移动 · 自动射击 · 点击开始后自动横屏';
+    // Left joystick
     const joy=document.createElement('div');joy.id='m-joy';joy.style.cssText='position:fixed;bottom:max(20px,env(safe-area-inset-bottom,20px));left:max(20px,env(safe-area-inset-left,20px));width:150px;height:150px;border-radius:75px;background:rgba(255,255,255,0.06);border:2px solid rgba(255,255,255,0.18);z-index:200;touch-action:none;';
     const thumb=document.createElement('div');thumb.id='m-thumb';thumb.style.cssText='position:absolute;width:50px;height:50px;border-radius:25px;background:rgba(255,255,255,0.35);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;';
     joy.appendChild(thumb);document.body.appendChild(joy);
@@ -441,6 +442,13 @@ function initInput(){
     joy.addEventListener('touchstart',e=>{e.preventDefault();if(jId!==null)return;const t=e.changedTouches[0];jId=t.identifier;const r=joy.getBoundingClientRect();jCX=r.left+r.width/2;jCY=r.top+r.height/2;GAME.mobileDX=0;GAME.mobileDY=0;},{passive:false});
     joy.addEventListener('touchmove',e=>{e.preventDefault();for(let i=0;i<e.changedTouches.length;i++){if(e.changedTouches[i].identifier===jId){const dx=e.changedTouches[i].clientX-jCX,dy=e.changedTouches[i].clientY-jCY;const maxR=55;let ndx=dx,ndy=dy,dist=Math.sqrt(dx*dx+dy*dy);if(dist>maxR){ndx=dx/dist*maxR;ndy=dy/dist*maxR;}GAME.mobileDX=ndx/maxR;GAME.mobileDY=ndy/maxR;GAME.mouseOnCanvas=true;const th=document.getElementById('m-thumb');if(th)th.style.transform='translate(calc(-50% + '+ndx+'px), calc(-50% + '+ndy+'px))';}}},{passive:false});
     joy.addEventListener('touchend',e=>{for(let i=0;i<e.changedTouches.length;i++){if(e.changedTouches[i].identifier===jId){jId=null;GAME.mobileDX=0;GAME.mobileDY=0;GAME.mouseOnCanvas=false;const th=document.getElementById('m-thumb');if(th)th.style.transform='translate(-50%,-50%)';}}});
+    // Right fire button (visual feedback only)
+    const fb=document.createElement('div');fb.id='m-fire';fb.style.cssText='position:fixed;bottom:max(40px,calc(env(safe-area-inset-bottom,20px) + 20px));right:max(30px,env(safe-area-inset-right,20px));width:90px;height:90px;border-radius:45px;background:rgba(255,180,80,0.15);border:2px solid rgba(255,200,100,0.3);z-index:200;touch-action:none;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.5);font-size:13px;font-weight:bold;letter-spacing:2px;transition:background 0.1s;';
+    fb.textContent='FIRE';
+    document.body.appendChild(fb);
+    fb.addEventListener('touchstart',e=>{e.preventDefault();fb.style.background='rgba(255,180,40,0.4)';fb.style.borderColor='rgba(255,220,80,0.6)';fb.style.color='rgba(255,255,255,0.9)';fb.style.boxShadow='0 0 20px rgba(255,180,40,0.4)';},{passive:false});
+    fb.addEventListener('touchend',e=>{fb.style.background='rgba(255,180,80,0.15)';fb.style.borderColor='rgba(255,200,100,0.3)';fb.style.color='rgba(255,255,255,0.5)';fb.style.boxShadow='none';});
+    fb.addEventListener('touchcancel',e=>{fb.style.background='rgba(255,180,80,0.15)';fb.style.borderColor='rgba(255,200,100,0.3)';fb.style.color='rgba(255,255,255,0.5)';fb.style.boxShadow='none';});
   }
 }
 
