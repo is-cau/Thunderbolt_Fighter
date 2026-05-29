@@ -760,7 +760,7 @@ function updateWaveSpawning(dt){
   if(GAME.waveCleared){GAME.waveClearTimer+=dt;if(GAME.waveClearTimer>=0.3)startWave(GAME.currentWave+1);return;}
   const q=GAME.waveSpawnQueue;
   const warmup=Math.min(1,GAME.waveTimer/10);
-  const waveSpeed=1+GAME.wave*0.8; // Each wave adds 80% spawn speed
+  const waveSpeed=1+GAME.wave*0.5;
   if(GAME.waveEnemyIndex<q.length){GAME.waveSpawnTimer+=dt*warmup*waveSpeed;const e=q[GAME.waveEnemyIndex];if(GAME.waveSpawnTimer>=e.delay){GAME.waveSpawnTimer=0;spawnWaveEnemy(e);GAME.waveEnemyIndex++;}}
   // Wave completion
   if(GAME.waveEnemyIndex>=q.length){
@@ -879,7 +879,7 @@ function updateAutoEffects(dt){
     if(others.length>0){
       const eff=others[Math.floor(Math.random()*others.length)];
       triggerAutoEffect(eff);
-      cd[eff]=6+Math.random()*2;
+      cd[eff]=eff==='iceStorm'?8:6+Math.random()*2;
     }
   }
   // Lightning runs independently (multiple concurrent chains)
@@ -1043,9 +1043,9 @@ function updateAmbientSpawns(dt){
     const td=ENEMY_TYPES[t];const sc=1+(GAME.wave-1)*0.2;if(td){e.hp=Math.ceil(td.hp*sc);e.maxHp=e.hp;e.speed=td.speed;e.scoreValue=Math.ceil(td.score*sc);e.w=e.h=td.size;e.radius=td.size/2;e.canShoot=td.canShoot;e.shootInterval=td.shootInterval;}
     e.pattern=patterns[Math.floor(Math.random()*patterns.length)];
     e.patternData={patternTimer:0,startX:x,startY:-30};e._shootTimer=Math.random()*e.shootInterval;
-    const groupChance=Math.min(0.9,(0.2+warmup*0.4)+GAME.wave*0.05); // Scales with wave
+    const groupChance=Math.min(0.95,Math.max(0.5,(0.2+warmup*0.4)+GAME.wave*0.05));
     if(Math.random()<groupChance){
-      const groupSize=warmup<0.5?1:Math.min(6,2+Math.floor(GAME.wave/3)); // Grows with wave
+      const groupSize=warmup<0.5?1:Math.min(7,2+Math.floor(GAME.wave/3));
       for(let s=0;s<groupSize;s++){
         const sx=Math.random()*CANVAS_W;const st=types[Math.floor(Math.random()*types.length)];
         const se=acquireEnemy(sx,-30-Math.random()*40,st);if(!se)continue;
@@ -1461,7 +1461,7 @@ function spawnPlayerHitEffect(x,y){
 }
 
 function spawnBossExplosion(x,y){
-  for(let i=0;i<50;i++){const a=Math.random()*Math.PI*2,spd=30+Math.random()*250,sz=2+Math.random()*5,life=0.5+Math.random()*1.5;const clr=[COLORS.lavender,COLORS.purple,COLORS.pink,COLORS.hotPink,COLORS.coral,COLORS.gold,COLORS.skyBlue,COLORS.white];acquireParticle(x+(Math.random()-0.5)*40,y+(Math.random()-0.5)*30,Math.cos(a)*spd,Math.sin(a)*spd,clr[(Math.random()*clr.length)|0],sz,life);}
+  for(let i=0;i<60;i++){const a=Math.random()*Math.PI*2,spd=30+Math.random()*250,sz=2+Math.random()*5,life=0.5+Math.random()*1.5;const clr=[COLORS.lavender,COLORS.purple,COLORS.pink,COLORS.hotPink,COLORS.coral,COLORS.gold,COLORS.skyBlue,COLORS.white];acquireParticle(x+(Math.random()-0.5)*40,y+(Math.random()-0.5)*30,Math.cos(a)*spd,Math.sin(a)*spd,clr[(Math.random()*clr.length)|0],sz,life);}
   for(let i=0;i<10;i++){const a=Math.random()*Math.PI*2,spd=80+Math.random()*150,life=0.8+Math.random()*1.2;acquireParticle(x+(Math.random()-0.5)*30,y+(Math.random()-0.5)*20,Math.cos(a)*spd,Math.sin(a)*spd,Math.random()<0.5?COLORS.lavender:COLORS.pink,4+Math.random()*7,life);}
   for(let i=0;i<3;i++){const rp=acquireParticle(x,y,0,0,[COLORS.pink,COLORS.gold,COLORS.white][i],8,0.5+i*0.15);if(rp)rp.isRing=true;}
   GAME.flashAlpha=0.7;GAME.screenShake=15;GAME.screenShakeDuration=0.8;
