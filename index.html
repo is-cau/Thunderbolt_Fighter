@@ -513,7 +513,7 @@ function hitPlayer(dmg){
   GAME.player.hp-=dmg;GAME.player.invincible=2;GAME.combo=0;
   GAME.screenShake=8;GAME.screenShakeDuration=0.3;GAME.flashAlpha=0.35;
   spawnPlayerHitEffect(GAME.player.x,GAME.player.y);playSound('playerHit');
-  // 宇宙大爆发：HP降到3时触发神龙摆尾+冲击波+清场
+  // 宇宙大爆发：HP降到3时触发神龙摆尾+冲击波+寒冰风暴+清场
   if(GAME.player.hp===3&&!GAME._bigBangTriggered){
     GAME._bigBangTriggered=true;
     spawnComboText('宇宙大爆发!',CANVAS_W/2,CANVAS_H/2-30);
@@ -523,6 +523,8 @@ function hitPlayer(dmg){
     else{const prev=GAME.activeEffect;GAME.activeEffect=null;triggerAutoEffect('sweep');GAME._effectCooldowns.sweep=6;GAME.activeEffect=prev;}
     // 同时触发冲击波
     GAME._burstWave=0;GAME._burstNext=0;GAME.effectBurstActive=true;GAME.effectBurstTimer=1.2;
+    // 同时触发寒冰风暴（冰冻5秒+减速3秒）
+    triggerIceStorm();
     if(audioReady){const t=audioCtx.currentTime;const v=createVoice('sawtooth',30,0);if(v){v.g.gain.setValueAtTime(0.4,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+1.2);v.osc.frequency.linearRampToValueAtTime(120,t+0.6);v.osc.frequency.linearRampToValueAtTime(20,t+1.2);v.osc.stop(t+1.3);}}
   }
   if(GAME.player.hp<=0){GAME.player.hp=0;spawnPlayerDeath();}
@@ -957,9 +959,9 @@ function updateLightningChain(lc,dt){
   }
 }
 
-// 寒冰风暴 — freeze all non-boss enemies 2s, then slow 3s
+// 寒冰风暴 — freeze all non-boss enemies 5s, then slow 3s
 function triggerIceStorm(){
-  for(let i=0;i<GAME.enemies.length;i++){const e=GAME.enemies[i];if(!e.active||e.type==='boss')continue;e._frozen=true;e._frozenTimer=2.0;e._savedVx=e.vx;e._savedVy=e.vy;e.vx=0;e.vy=0;}
+  for(let i=0;i<GAME.enemies.length;i++){const e=GAME.enemies[i];if(!e.active||e.type==='boss')continue;e._frozen=true;e._frozenTimer=5.0;e._savedVx=e.vx;e._savedVy=e.vy;e.vx=0;e.vy=0;}
   for(let i=0;i<GAME.enemyBullets.length;i++){const b=GAME.enemyBullets[i];if(b.active){b.vx*=0.3;b.vy*=0.3;}} // Slow bullets too
   GAME.screenShake=3;GAME.screenShakeDuration=0.3;
   if(audioReady){const t=audioCtx.currentTime;const v=createVoice('sine',200,0);if(v){v.g.gain.setValueAtTime(0.2,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+0.5);v.osc.frequency.linearRampToValueAtTime(80,t+0.5);v.osc.stop(t+0.55);}}
