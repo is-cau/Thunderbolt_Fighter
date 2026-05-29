@@ -196,7 +196,7 @@ const GAME = {
   activeEffect:null, effectDisplayName:'', effectTimer:0, // currently active effect
   lightningChains:[], // up to 3 concurrent lightning chains [{timer,enemies}]
   effectLightning:[], effectMeteors:[], // effect data arrays
-  _effectCooldowns:{lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0,iceStorm:0},
+  _effectCooldowns:{lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0,iceStorm:0,laserSweep:0},
   _lightningBaseCooldown:1.0,
   upgradeLevel:0, // score milestones: bullet damage = 1 + upgradeLevel
   iceStormActive:false, iceStormTimer:0, // freeze effect
@@ -354,6 +354,25 @@ function sfxGameOver(){
   });
 }
 
+function sfxLaserSweep(){
+  if(!audioReady)return;const t=audioCtx.currentTime,dur=0.6;
+  // Sweeping frequency effect: high→low→high sawtooth
+  const v=createVoice('sawtooth',1200,0);if(!v)return;
+  v.g.gain.setValueAtTime(0.15,t+0.01);
+  v.g.gain.linearRampToValueAtTime(0.25,t+0.3);
+  v.g.gain.linearRampToValueAtTime(0.15,t+0.6);
+  v.g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  v.osc.frequency.setValueAtTime(1200,t);
+  v.osc.frequency.linearRampToValueAtTime(200,t+0.3);
+  v.osc.frequency.linearRampToValueAtTime(1200,t+0.6);
+  v.osc.stop(t+dur+0.02);
+  // Sub layer: low rumble
+  const sub=createVoice('triangle',60,0);if(sub){
+    sub.g.gain.setValueAtTime(0.1,t+0.05);
+    sub.g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    sub.osc.stop(t+dur+0.02);
+  }
+}
 function sfxMusicStart(){
   if(!audioReady||musicInterval)return;
   const scale=[262,294,330,392,440,523];
@@ -900,7 +919,7 @@ function onBossDeath(boss){
 // ================================================================
 // AUTO-TRIGGER SPECIAL EFFECTS (间隔触发: 闪电链/神龙摆尾/冲击波/流星雨/散射/侧方射击/冲击波)
 // ================================================================
-const AUTO_EFFECTS=['sweep','burst','meteor','scatter','sideShot','iceStorm'];
+const AUTO_EFFECTS=['sweep','burst','meteor','scatter','sideShot','iceStorm','laserSweep'];
 function updateAutoEffects(dt){
   if(GAME.bossWarning>0)return;
   // Decay per-effect cooldowns
@@ -949,6 +968,7 @@ function updateAutoEffects(dt){
       case'scatter':updateScatter(dt);break;
       case'sideShot':updateSideShot(dt);break;
       case'iceStorm':updateIceStorm(dt);break;
+      case'laserSweep':updateLaserSweep(dt);break;
     }
     if(GAME.effectTimer<=0){GAME.activeEffect=null;GAME.effectDisplayName='';GAME.effectMeteors=[];}
   }
@@ -964,10 +984,12 @@ function triggerAutoEffect(eff){
     case'scatter':GAME.effectTimer=3.0;name='散射弹幕';break;
     case'sideShot':GAME.effectTimer=3.0;name='侧方射击';break;
     case'iceStorm':GAME.effectTimer=2.0;name='寒冰风暴';triggerIceStorm();break;
+    case'laserSweep':GAME.effectTimer=3.0;GAME._laserSweepAngle=-70*Math.PI/180;name='激光扫射';break;
   }
   GAME.effectDisplayName=name;
   spawnComboText(name,CANVAS_W/2,CANVAS_H/2-60);
-  if(audioReady){const t=audioCtx.currentTime;const f=eff==='bomb'?60:(eff==='burst'?600:400);const v=createVoice('triangle',f,0);if(v){v.g.gain.setValueAtTime(0.15,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+0.3);v.osc.stop(t+0.35);}}
+  if(eff==='laserSweep'){sfxLaserSweep();}
+  else if(audioReady){const t=audioCtx.currentTime;const f=eff==='bomb'?60:(eff==='burst'?600:400);const v=createVoice('triangle',f,0);if(v){v.g.gain.setValueAtTime(0.15,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+0.3);v.osc.stop(t+0.35);}}
 }
 
 // 闪电链 — per-chain update, claimedEnemies excludes enemies already in other chains
@@ -1069,6 +1091,48 @@ function updateSideShot(dt){
   }
 }
 
+// 激光扫射 — penetrating beam sweeps left→right→left, damages enemies & destroys bullets
+function updateLaserSweep(dt){
+  const p=GAME.player;if(!p||!p.active)return;
+  const progress=1-(GAME.effectTimer/3.0); // 0→1 over 3s
+  const sweepAngle=Math.sin(progress*Math.PI*2-Math.PI/2)*70*Math.PI/180; // -70°→+70°→-70°
+  GAME._laserSweepAngle=sweepAngle;
+  const beamLen=Math.sqrt(CANVAS_W*CANVAS_W+CANVAS_H*CANVAS_H); // screen diagonal
+  const ex=p.x+Math.sin(sweepAngle)*beamLen;
+  const ey=p.y-Math.cos(sweepAngle)*beamLen; // 0°=straight up
+  // Line segment A(p)→B(ex,ey), check all enemies for intersection
+  const ax=p.x,ay=p.y,bx=ex,by=ey;
+  const abx=bx-ax,aby=by-ay,abLen2=abx*abx+aby*aby;
+  // Damage enemies (penetrating)
+  for(let i=0;i<GAME.enemies.length;i++){
+    const en=GAME.enemies[i];if(!en.active)continue;
+    // Point-to-line-segment distance vs enemy radius
+    let t=((en.x-ax)*abx+(en.y-ay)*aby)/abLen2;
+    t=Math.max(0,Math.min(1,t));
+    const cx=ax+t*abx,cy=ay+t*aby;
+    const dist=Math.sqrt((en.x-cx)**2+(en.y-cy)**2);
+    if(dist<en.radius+8){ // beam width ~8px each side
+      en.hp-=5*dt;spawnHitSparks(en.x,en.y,cx,cy);
+      if(en.hp<=0)onEnemyKilled(en);
+    }
+  }
+  // Destroy enemy bullets along beam
+  for(let i=0;i<GAME.enemyBullets.length;i++){
+    const b=GAME.enemyBullets[i];if(!b.active)continue;
+    let t=((b.x-ax)*abx+(b.y-ay)*aby)/abLen2;
+    t=Math.max(0,Math.min(1,t));
+    const cx=ax+t*abx,cy=ay+t*aby;
+    if(Math.sqrt((b.x-cx)**2+(b.y-cy)**2)<12){
+      b.active=false;acquireParticle(b.x,b.y,0,0,COLORS.starYellow,3,0.2);
+    }
+  }
+  // Screen shake & beam hum on sweep extremes
+  if(Math.abs(Math.sin(progress*Math.PI*2))>0.95&&Math.random()<0.3){
+    GAME.screenShake=Math.max(GAME.screenShake||0,2);
+    GAME.screenShakeDuration=Math.max(GAME.screenShakeDuration||0,0.08);
+  }
+}
+
 // Ambient enemy spawns between waves for roguelike non-stop action
 let _ambientTimer=0;
 function updateAmbientSpawns(dt){
@@ -1165,12 +1229,16 @@ function startGame(){
   GAME.gameState='playing';GAME.score=0;GAME.combo=0;GAME.maxCombo=0;GAME.comboTimer=0;
   GAME._comboMilestonesHit={};GAME.slowMotion=1;GAME.slowMotionTimer=0;
   GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.lightningChains=[];GAME.effectLightning=[];GAME.effectMeteors=[];
-  GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0,iceStorm:0};
+  GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0,iceStorm:0,laserSweep:0};
   GAME._lightningBaseCooldown=1.0;GAME.upgradeLevel=0;GAME._bigBangTriggered=false;GAME.effectBurstActive=false;
   GAME.bossActive=false;GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
   GAME.screenShake=0;GAME.screenShakeDuration=0;GAME.flashAlpha=0;GAME.comboTexts=[];
   for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false;
   for(let i=0;i<GAME.playerBullets.length;i++)GAME.playerBullets[i].active=false;
+  // 激光扫射开局优先触发：其他技能给初始冷却，激光优先
+  GAME._effectCooldowns.sweep=0.5;GAME._effectCooldowns.burst=0.5;
+  GAME._effectCooldowns.meteor=0.5;GAME._effectCooldowns.scatter=0.5;
+  GAME._effectCooldowns.sideShot=0.5;GAME._effectCooldowns.iceStorm=0.5;
   for(let i=0;i<GAME.enemies.length;i++)GAME.enemies[i].active=false;
   for(let i=0;i<GAME.powerUps.length;i++)GAME.powerUps[i].active=false;
   for(let i=0;i<GAME.particles.length;i++)GAME.particles[i].active=false;
@@ -1581,6 +1649,7 @@ function drawSkillCooldowns(ctx){
     {name:'散射弹幕',key:'scatter',color:'#B5EAD7'},
     {name:'侧方射击',key:'sideShot',color:'#C7CEEA'},
     {name:'寒冰风暴',key:'iceStorm',color:'#A0D2F0'},
+    {name:'激光扫射',key:'laserSweep',color:'#FF4444'},
   ];
   const barW=90,barH=6,gap=6,x0=CANVAS_W/2-((skills.length*barW+(skills.length-1)*gap)/2),y0=CANVAS_H-14;
   skills.forEach((s,i)=>{
@@ -1677,6 +1746,50 @@ function drawMeteorEffect(ctx){
   }
 }
 
+// 激光扫射渲染 — thick glowing beam with energy particles along its length
+function drawLaserSweep(ctx){
+  const p=GAME.player;if(!p||!p.active)return;
+  const angle=GAME._laserSweepAngle||0;
+  const beamLen=Math.sqrt(CANVAS_W*CANVAS_W+CANVAS_H*CANVAS_H);
+  const ex=p.x+Math.sin(angle)*beamLen,ey=p.y-Math.cos(angle)*beamLen;
+  const t=GAME.time||0;
+  ctx.save();
+  // Outer glow
+  const glow=ctx.createLinearGradient(p.x,p.y,ex,ey);
+  glow.addColorStop(0,'rgba(255,80,80,0)');glow.addColorStop(0.1,'rgba(255,60,60,0.3)');
+  glow.addColorStop(0.5,'rgba(255,30,30,0.5)');glow.addColorStop(0.9,'rgba(255,60,60,0.3)');
+  glow.addColorStop(1,'rgba(255,80,80,0)');
+  ctx.strokeStyle=glow;ctx.lineWidth=24;ctx.shadowColor='#FF2222';ctx.shadowBlur=30;
+  ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
+  // Mid glow
+  const mid=ctx.createLinearGradient(p.x,p.y,ex,ey);
+  mid.addColorStop(0,'rgba(255,180,180,0)');mid.addColorStop(0.1,'rgba(255,150,150,0.4)');
+  mid.addColorStop(0.5,'rgba(255,255,255,0.9)');mid.addColorStop(0.9,'rgba(255,150,150,0.4)');
+  mid.addColorStop(1,'rgba(255,180,180,0)');
+  ctx.strokeStyle=mid;ctx.lineWidth=8;ctx.shadowColor='#FFFFFF';ctx.shadowBlur=15;
+  ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
+  // Core beam
+  ctx.strokeStyle='rgba(255,255,255,0.95)';ctx.lineWidth=3;
+  ctx.shadowColor='#FFFFFF';ctx.shadowBlur=8;
+  ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
+  // Energy sparks along beam
+  const segs=Math.floor(beamLen/30);
+  for(let s=1;s<segs;s++){
+    const sx=p.x+(ex-p.x)*s/segs, sy=p.y+(ey-p.y)*s/segs;
+    if(Math.random()<0.3){
+      const sparkAlpha=0.5+Math.random()*0.5;
+      ctx.fillStyle=rgba('#FF8888',sparkAlpha);
+      ctx.beginPath();ctx.arc(sx+(Math.random()-0.5)*12,sy+(Math.random()-0.5)*12,1+Math.random()*2,0,Math.PI*2);ctx.fill();
+    }
+  }
+  // Origin burst at player
+  const ob=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,20);
+  ob.addColorStop(0,'rgba(255,255,255,0.9)');ob.addColorStop(0.3,'rgba(255,100,100,0.6)');
+  ob.addColorStop(1,'rgba(255,0,0,0)');
+  ctx.fillStyle=ob;ctx.beginPath();ctx.arc(p.x,p.y,20+Math.sin(t*15)*3,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;ctx.restore();
+}
+
 // ============================================================================
 // SECTION 15: HELPER DRAWING FUNCTIONS
 // ============================================================================
@@ -1746,6 +1859,7 @@ function render(){
   for(let i=0;i<GAME.lightningChains.length;i++)drawLightningChain(ctx,GAME.lightningChains[i]);
   if(GAME.activeEffect==='sweep')drawSweepEffect(ctx);
   if(GAME.activeEffect==='meteor')drawMeteorEffect(ctx);
+  if(GAME.activeEffect==='laserSweep')drawLaserSweep(ctx);
   // HUD
   drawHUD(ctx);drawComboTexts(ctx);drawScreenFlash(ctx);drawBossWarning(ctx);drawSkillCooldowns(ctx);
   // Pause overlay
