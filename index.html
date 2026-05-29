@@ -854,16 +854,15 @@ function updateAutoEffects(dt){
   for(const k in cd)if(cd[k]>0)cd[k]-=dt;
   // Lightning fires independently when ready (up to 3 concurrent chains)
   const maxChains=GAME.wave>=10?3:(GAME.wave>=5?2:1);
-  if((!cd['lightning']||cd['lightning']<=0)&&GAME.lightningChains.length<maxChains){
+  if((cd.lightning||0)<=0&&GAME.lightningChains.length<maxChains){
     GAME.lightningChains.push({timer:3.6,enemies:[]});
     GAME.effectDisplayName=GAME.effectDisplayName||'闪电链';
-    cd['lightning']=GAME._lightningBaseCooldown;
+    cd.lightning=GAME._lightningBaseCooldown;
     GAME._lightningBaseCooldown=Math.max(0.1,GAME._lightningBaseCooldown*0.9);
-    spawnComboText('闪电链',CANVAS_W/2,CANVAS_H/2-60);
   }
   // Other skills fire when no non-lightning effect is active
   if(!GAME.activeEffect){
-    const others=AUTO_EFFECTS.filter(e=>e!=='lightning'&&(!cd[e]||cd[e]<=0));
+    const others=AUTO_EFFECTS.filter(e=>(cd[e]||0)<=0);
     if(others.length>0){
       const eff=others[Math.floor(Math.random()*others.length)];
       triggerAutoEffect(eff);
@@ -1014,8 +1013,8 @@ function updateAmbientSpawns(dt){
   _ambientTimer+=dt;
   // Ramp-up: slower first 10s, then ramps up
   const warmup=Math.min(1,GAME.waveTimer/10); // 0→1 over 10 seconds
-  const baseInterval=Math.max(0.02,0.8-GAME.wave*0.1); // Scales even harder
-  const interval=baseInterval/(0.3+warmup*0.7); // 3x slower at start
+  const baseInterval=0.5*Math.pow(0.7,GAME.wave-1)+0.03; // Fast early, gradual late
+  const interval=baseInterval/(0.15+warmup*0.85);
   if(_ambientTimer>=interval){
     _ambientTimer=0;
     const types=['basic','basic','fast','fast','swarmer','swarmer','tank'];
