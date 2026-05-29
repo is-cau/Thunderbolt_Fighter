@@ -164,6 +164,7 @@ const GAME = {
   // Auto-trigger special effects
   autoEffectTimer:0, autoEffectInterval:3, // seconds between auto effects
   activeEffect:null, effectDisplayName:'', effectTimer:0, // currently active effect
+  lightningActive:false, lightningTimer:0, // lightning runs concurrently
   effectLightning:[], effectMeteors:[], // effect data arrays
   _effectCooldowns:{lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0}, // per-effect cooldowns
   _lightningBaseCooldown:1.0, // decreases by 0.1 each trigger
@@ -840,32 +841,45 @@ function onBossDeath(boss){
 // ================================================================
 // AUTO-TRIGGER SPECIAL EFFECTS (间隔触发: 闪电链/神龙摆尾/冲击波/流星雨/散射/侧方射击/冲击波)
 // ================================================================
-const AUTO_EFFECTS=['lightning','sweep','burst','meteor','scatter','sideShot'];
+const AUTO_EFFECTS=['sweep','burst','meteor','scatter','sideShot'];
 function updateAutoEffects(dt){
   if(GAME.bossWarning>0)return;
   // Decay per-effect cooldowns
   const cd=GAME._effectCooldowns;
   for(const k in cd)if(cd[k]>0)cd[k]-=dt;
-  // Auto-fire any skill whose cooldown is ready (immediately)
+  // Lightning fires independently when ready (alongside any effect)
+  if((!cd['lightning']||cd['lightning']<=0)&&!GAME.lightningActive){
+    GAME.lightningActive=true;GAME.lightningTimer=3.6;GAME.effectLightning=[];
+    GAME.effectDisplayName=GAME.effectDisplayName||'闪电链';
+    cd['lightning']=GAME._lightningBaseCooldown;
+    GAME._lightningBaseCooldown=Math.max(0.1,GAME._lightningBaseCooldown*0.9);
+    spawnComboText('闪电链',CANVAS_W/2,CANVAS_H/2-60);
+  }
+  // Other skills fire when no non-lightning effect is active
   if(!GAME.activeEffect){
-    const available=AUTO_EFFECTS.filter(e=>!cd[e]||cd[e]<=0);
-    if(available.length>0){
-      const eff=available[Math.floor(Math.random()*available.length)];
+    const others=AUTO_EFFECTS.filter(e=>e!=='lightning'&&(!cd[e]||cd[e]<=0));
+    if(others.length>0){
+      const eff=others[Math.floor(Math.random()*others.length)];
       triggerAutoEffect(eff);
-      if(eff==='lightning'){cd[eff]=GAME._lightningBaseCooldown;GAME._lightningBaseCooldown=Math.max(0.1,GAME._lightningBaseCooldown*0.9);}else cd[eff]=6+Math.random()*2;
+      cd[eff]=6+Math.random()*2;
     }
   }
+  // Lightning runs independently always
+  if(GAME.lightningActive){
+    GAME.lightningTimer-=dt;updateLightning(dt);
+    if(GAME.lightningTimer<=0){GAME.lightningActive=false;GAME.effectLightning=[];}
+  }
+  // Other effects
   if(GAME.activeEffect){
     GAME.effectTimer-=dt;
     switch(GAME.activeEffect){
-      case'lightning':updateLightning(dt);break;
       case'sweep':updateSweep(dt);break;
       case'burst':updateBurst(dt);break;
       case'meteor':updateMeteors(dt);break;
       case'scatter':updateScatter(dt);break;
       case'sideShot':updateSideShot(dt);break;
     }
-    if(GAME.effectTimer<=0){GAME.activeEffect=null;GAME.effectDisplayName='';GAME.effectLightning=[];GAME.effectMeteors=[];}
+    if(GAME.effectTimer<=0){GAME.activeEffect=null;GAME.effectDisplayName='';GAME.effectMeteors=[];}
   }
 }
 
@@ -873,7 +887,6 @@ function triggerAutoEffect(eff){
   GAME.activeEffect=eff;
   let name='';
   switch(eff){
-    case'lightning':GAME.effectTimer=3.6;GAME.effectLightning=[];name='闪电链';break;
     case'sweep':GAME.effectTimer=2.0;name='神龙摆尾';break;
     case'burst':GAME.effectTimer=1.2;GAME._burstWave=0;GAME._burstNext=0;name='冲击波';break;
     case'meteor':GAME.effectTimer=4.0;GAME.effectMeteors=[];name='流星雨';break;
@@ -1059,7 +1072,7 @@ function startGame(){
   initPools();createPlayer();
   GAME.gameState='playing';GAME.score=0;GAME.combo=0;GAME.maxCombo=0;GAME.comboTimer=0;
   GAME._comboMilestonesHit={};GAME.slowMotion=1;GAME.slowMotionTimer=0;
-  GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.effectLightning=[];GAME.effectMeteors=[];
+  GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.lightningActive=false;GAME.effectLightning=[];GAME.effectMeteors=[];
   GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0};
   GAME._lightningBaseCooldown=1.0;
   GAME.bossActive=false;GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
@@ -1622,7 +1635,7 @@ function render(){
   for(let i=0;i<GAME.particles.length;i++){const p=GAME.particles[i];if(p.active)drawParticle(ctx,p);}
   ctx.restore();
   // Auto-trigger effect visuals
-  if(GAME.activeEffect==='lightning')drawLightningEffect(ctx);
+  if(GAME.lightningActive)drawLightningEffect(ctx);
   if(GAME.activeEffect==='sweep')drawSweepEffect(ctx);
   if(GAME.activeEffect==='meteor')drawMeteorEffect(ctx);
   // HUD
