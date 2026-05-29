@@ -1215,8 +1215,7 @@ function drawPlayer(ctx,x,y){
 }
 
 function drawEnemy(ctx,enemy){
-  if(enemy._frozen){ctx.save();ctx.globalAlpha=0.6;} // Blue tint for frozen
-  if(enemy._slowed){ctx.save();ctx.globalAlpha=0.8;} // Slight tint for slowed
+  if(enemy._frozen||enemy._slowed){ctx.save();}
   switch(enemy.type){
     case'basic':drawBasicEnemy(ctx,enemy.x,enemy.y);break;
     case'fast':drawFastEnemy(ctx,enemy.x,enemy.y);break;
@@ -1225,6 +1224,18 @@ function drawEnemy(ctx,enemy){
     case'swarmer':drawSwarmerEnemy(ctx,enemy.x,enemy.y);break;
     case'splitter':drawSplitterEnemy(ctx,enemy.x,enemy.y);break;
     default:drawBasicEnemy(ctx,enemy.x,enemy.y);
+  }
+  if(enemy._frozen){
+    // Ice crystal overlay
+    const t=GAME.time||0;
+    ctx.strokeStyle=rgba('#88DDFF',0.7+0.3*Math.sin(t*6));ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(enemy.x,enemy.y,enemy.radius+6,0,Math.PI*2);ctx.stroke();
+    // Ice spikes
+    for(let s=0;s<6;s++){const a=s/6*Math.PI*2+t*2;ctx.fillStyle=rgba('#AAEEFF',0.6);ctx.beginPath();ctx.moveTo(enemy.x+Math.cos(a)*(enemy.radius+4),enemy.y+Math.sin(a)*(enemy.radius+4));ctx.lineTo(enemy.x+Math.cos(a+0.15)*(enemy.radius+10),enemy.y+Math.sin(a+0.15)*(enemy.radius+10));ctx.lineTo(enemy.x+Math.cos(a-0.15)*(enemy.radius+10),enemy.y+Math.sin(a-0.15)*(enemy.radius+10));ctx.closePath();ctx.fill();}
+    ctx.fillStyle=rgba('#CCEEFF',0.3);ctx.beginPath();ctx.arc(enemy.x,enemy.y,enemy.radius+3,0,Math.PI*2);ctx.fill();
+  }else if(enemy._slowed){
+    ctx.strokeStyle=rgba('#88BBFF',0.4);ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.arc(enemy.x,enemy.y,enemy.radius+4,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
   }
   if(enemy._frozen||enemy._slowed)ctx.restore();
 }
