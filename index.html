@@ -572,6 +572,7 @@ function update(dt){
   updatePowerUps(dt);updateComboTexts(dt);updateEffects(dt);
   updateWaveSpawning(dt);updateSlowMotion(dt);updateComboTimer(dt);
   updateAmbientSpawns(dt);updateAutoEffects(dt);
+  if(GAME.effectBurstActive){GAME.effectBurstTimer-=dt;updateBurst(dt);if(GAME.effectBurstTimer<=0)GAME.effectBurstActive=false;}
   checkPlayerDeath(dt);checkCollisions();
 }
 
@@ -1079,6 +1080,7 @@ function maybeDropPowerUp(x,y){
 function applyPowerUp(pu){
   if(!pu||!pu.active)return;pu.active=false;playSound('powerUp');
   const p=GAME.player;if(!p)return;
+  if(p.hp>1)GAME._bigBangTriggered=false; // Reset big bang flag when healed above 1
   switch(pu.type){
     case'spread':p.powerLevel=3;p._spreadTimer=10;break;
     case'shield':p._baseMaxHp=p._baseMaxHp||5;p.maxHp=p._baseMaxHp+1;p.hp=Math.min(p.hp+1,p.maxHp);p._shieldTimer=15;break;
@@ -1125,7 +1127,7 @@ function startGame(){
   GAME._comboMilestonesHit={};GAME.slowMotion=1;GAME.slowMotionTimer=0;
   GAME.autoEffectTimer=1;GAME.activeEffect=null;GAME.effectDisplayName='';GAME.lightningChains=[];GAME.effectLightning=[];GAME.effectMeteors=[];
   GAME._effectCooldowns={lightning:0,sweep:0,burst:0,meteor:0,scatter:0,sideShot:0,iceStorm:0};
-  GAME._lightningBaseCooldown=1.0;GAME.upgradeLevel=0;
+  GAME._lightningBaseCooldown=1.0;GAME.upgradeLevel=0;GAME._bigBangTriggered=false;GAME.effectBurstActive=false;
   GAME.bossActive=false;GAME.bossWarning=0;GAME.bossWarningTimer=0;GAME._deathStarted=false;GAME._deathTimer=0;GAME._deathTriggered=false;
   GAME.screenShake=0;GAME.screenShakeDuration=0;GAME.flashAlpha=0;GAME.comboTexts=[];
   for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false;
