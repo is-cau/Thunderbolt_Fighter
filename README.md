@@ -2,6 +2,11 @@
 
 横版卷轴射击游戏（STG），Q版可爱画风。纯前端单文件 `index.html`，零依赖。
 
+# 体验链接
+
+## [点击即玩](https://is-cau.github.io/Thunderbolt_Fighter/)
+
+
 ## 操作
 
 | 操作 | 桌面端 | 手机端 |
