@@ -505,6 +505,18 @@ function hitPlayer(dmg){
   GAME.player.hp-=dmg;GAME.player.invincible=2;GAME.combo=0;
   GAME.screenShake=8;GAME.screenShakeDuration=0.3;GAME.flashAlpha=0.35;
   spawnPlayerHitEffect(GAME.player.x,GAME.player.y);playSound('playerHit');
+  // 宇宙大爆发：HP降到1时触发神龙摆尾+冲击波
+  if(GAME.player.hp===1&&!GAME._bigBangTriggered){
+    GAME._bigBangTriggered=true;
+    spawnComboText('宇宙大爆发!',CANVAS_W/2,CANVAS_H/2-30);
+    GAME.screenShake=15;GAME.screenShakeDuration=0.6;GAME.flashAlpha=0.8;
+    // 强制触发神龙摆尾
+    if(!GAME.activeEffect||GAME.activeEffect==='sweep'){triggerAutoEffect('sweep');GAME._effectCooldowns.sweep=6;}
+    else{const prev=GAME.activeEffect;GAME.activeEffect=null;triggerAutoEffect('sweep');GAME._effectCooldowns.sweep=6;GAME.activeEffect=prev;}
+    // 同时触发冲击波
+    GAME._burstWave=0;GAME._burstNext=0;GAME.effectBurstActive=true;GAME.effectBurstTimer=1.2;
+    if(audioReady){const t=audioCtx.currentTime;const v=createVoice('sawtooth',30,0);if(v){v.g.gain.setValueAtTime(0.4,t);v.g.gain.exponentialRampToValueAtTime(0.001,t+1.2);v.osc.frequency.linearRampToValueAtTime(120,t+0.6);v.osc.frequency.linearRampToValueAtTime(20,t+1.2);v.osc.stop(t+1.3);}}
+  }
   if(GAME.player.hp<=0){GAME.player.hp=0;spawnPlayerDeath();}
 }
 
@@ -923,8 +935,8 @@ function updateLightningChain(lc,dt){
   const p=GAME.player;if(!p||!p.active)return;
   const enemies=GAME.enemies.filter(e=>e.active);if(enemies.length<1){lc.enemies=[];return;}
   const chain=[p];let curr=p;
-  for(let step=0;step<6;step++){
-    let nearest=null,minD=250;
+  for(let step=0;step<12;step++){
+    let nearest=null,minD=350;
     for(let i=0;i<enemies.length;i++){if(chain.includes(enemies[i]))continue;const d=Math.sqrt((enemies[i].x-curr.x)**2+(enemies[i].y-curr.y)**2);if(d<minD){minD=d;nearest=enemies[i];}}
     if(!nearest)break;chain.push(nearest);curr=nearest;
   }
