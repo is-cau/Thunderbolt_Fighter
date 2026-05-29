@@ -404,16 +404,15 @@ function isDown(code){return!!keys[code];}
 function initInput(){
   document.addEventListener('keydown',onKD);document.addEventListener('keyup',onKU);
   const canvas=document.querySelector('canvas');if(!canvas)return;
-  const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
-  // Mouse tracking (desktop)
+  const isMobile='ontouchstart' in window&&navigator.maxTouchPoints>0&&window.innerWidth<1024;
+  // Mouse tracking (always on, joystick overrides when active)
   canvas.addEventListener('mousemove',e=>{
-    if(isMobile)return;
     const r=canvas.getBoundingClientRect();
     GAME.mouseX=(e.clientX-r.left)/r.width*CANVAS_W;
     GAME.mouseY=(e.clientY-r.top)/r.height*CANVAS_H;
     GAME.mouseOnCanvas=true;
   });
-  canvas.addEventListener('mouseleave',()=>{if(!isMobile)GAME.mouseOnCanvas=false;});
+  canvas.addEventListener('mouseleave',()=>{GAME.mouseOnCanvas=false;});
   // Click to start
   canvas.addEventListener('click',()=>{if(GAME.gameState==='start'||GAME.gameState==='gameover')handleStartClick();});
   // Mobile joystick
