@@ -513,8 +513,8 @@ function hitPlayer(dmg){
   GAME.player.hp-=dmg;GAME.player.invincible=2;GAME.combo=0;
   GAME.screenShake=8;GAME.screenShakeDuration=0.3;GAME.flashAlpha=0.35;
   spawnPlayerHitEffect(GAME.player.x,GAME.player.y);playSound('playerHit');
-  // 宇宙大爆发：HP降到1时触发神龙摆尾+冲击波
-  if(GAME.player.hp===1&&!GAME._bigBangTriggered){
+  // 宇宙大爆发：HP降到3时触发神龙摆尾+冲击波+清场
+  if(GAME.player.hp===3&&!GAME._bigBangTriggered){
     GAME._bigBangTriggered=true;
     spawnComboText('宇宙大爆发!',CANVAS_W/2,CANVAS_H/2-30);
     GAME.screenShake=15;GAME.screenShakeDuration=0.6;GAME.flashAlpha=0.8;
@@ -872,6 +872,7 @@ function onBossDeath(boss){
   for(let i=0;i<GAME.enemies.length;i++){if(GAME.enemies[i].active&&GAME.enemies[i].type!=='boss')GAME.enemies[i].active=false;}
   for(let i=0;i<GAME.enemyBullets.length;i++)GAME.enemyBullets[i].active=false; // Clear all enemy bullets
   GAME.slowMotion=0.3;GAME.slowMotionTimer=1.5;
+  if(GAME.player)GAME.player.invincible=5; // 宇宙大爆炸触发时5秒无敌
   for(let i=0;i<2;i++){const types=['spread','spread','spread','speed'];acquirePowerUp(boss.x-40+Math.random()*80,boss.y-10+Math.random()*40,types[Math.floor(Math.random()*types.length)]);}
   GAME.waveBossDead=true;
 }
@@ -1088,11 +1089,11 @@ function maybeDropPowerUp(x,y){
 function applyPowerUp(pu){
   if(!pu||!pu.active)return;pu.active=false;playSound('powerUp');
   const p=GAME.player;if(!p)return;
-  if(p.hp>1)GAME._bigBangTriggered=false; // Reset big bang flag when healed above 1
+  if(p.hp>3)GAME._bigBangTriggered=false; // Reset big bang flag when healed above 3
   switch(pu.type){
     case'spread':p.powerLevel=3;p._spreadTimer=10;break;
-    case'shield':p._baseMaxHp=p._baseMaxHp||5;p.maxHp=p._baseMaxHp+1;p.hp=Math.min(p.hp+1,p.maxHp);p._shieldTimer=15;break;
-    case'heal':p.hp=Math.min(p.hp+1,p.maxHp||5);break;
+    case'shield':p._baseMaxHp=p._baseMaxHp||10;p.maxHp=p._baseMaxHp+1;p.hp=Math.min(p.hp+1,p.maxHp);p._shieldTimer=15;break;
+    case'heal':p.hp=Math.min(p.hp+1,p.maxHp||10);break;
     case'speed':p._speedBoost=1.3;p._speedTimer=8;break;
   }
 }
@@ -1164,7 +1165,7 @@ function gameOver(){
 function restartGame(){GAME._deathTriggered=false;GAME._deathStarted=false;startGame();}
 
 function createPlayer(){
-  GAME.player={x:CANVAS_W/2,y:CANVAS_H-80,vx:0,vy:0,w:14,h:14,radius:6,active:true,hp:5,maxHp:5,_baseMaxHp:5,
+  GAME.player={x:CANVAS_W/2,y:CANVAS_H-80,vx:0,vy:0,w:14,h:14,radius:6,active:true,hp:10,maxHp:10,_baseMaxHp:10,
     shootCooldown:0,powerLevel:1,speed:550,_spreadTimer:0,_speedBoost:1,_speedTimer:0,_shieldTimer:0,invincible:0};
 }
 
@@ -1498,7 +1499,7 @@ function drawHUD(ctx){
   ctx.fillStyle=rgba(COLORS.lavender,0.8);ctx.font='10px "Segoe UI","Microsoft YaHei",sans-serif';ctx.fillText('分数',CANVAS_W-12,18);
   if(GAME.upgradeLevel>0){ctx.fillStyle=rgba(COLORS.gold,0.9);ctx.font='bold 10px "Segoe UI","Microsoft YaHei",sans-serif';ctx.fillText('Lv.'+(GAME.upgradeLevel+1)+' 伤害x'+(1+GAME.upgradeLevel),CANVAS_W-12,74);}
   // HP hearts
-  const hp=(GAME.player&&GAME.player.hp)||0,maxHp=(GAME.player&&GAME.player.maxHp)||5,hs=11,hsp=27;
+  const hp=(GAME.player&&GAME.player.hp)||0,maxHp=(GAME.player&&GAME.player.maxHp)||10,hs=11,hsp=27;
   for(let i=0;i<maxHp;i++){const hx=16+i*hsp,hy=20;if(i<hp){drawHeart(ctx,hx,hy,hs,COLORS.hotPink,1);ctx.fillStyle=rgba(COLORS.white,0.4);ctx.beginPath();ctx.arc(hx-hs*0.15,hy-hs*0.2,hs*0.2,0,Math.PI*2);ctx.fill();}else{drawHeart(ctx,hx,hy,hs,COLORS.charcoal,0.2);ctx.strokeStyle=rgba(COLORS.charcoal,0.3);ctx.lineWidth=0.8;ctx.beginPath();const s=hs*0.5;ctx.moveTo(hx,hy+s*1.4);ctx.bezierCurveTo(hx-s*1.3,hy+s*0.5,hx-s*1.3,hy-s*0.5,hx,hy-s*0.2);ctx.bezierCurveTo(hx+s*1.3,hy-s*0.5,hx+s*1.3,hy+s*0.5,hx,hy+s*1.4);ctx.closePath();ctx.stroke();}}
   ctx.fillStyle=rgba(COLORS.lavender,0.8);ctx.font='10px "Segoe UI","Microsoft YaHei",sans-serif';ctx.textAlign='left';ctx.fillText('生命',16,42);
   // Wave
