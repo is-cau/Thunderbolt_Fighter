@@ -144,7 +144,8 @@ canvas {
 <!-- 竖屏旋转提示 -->
 <div id="rotate-hint">
   <div class="rotate-icon">📱↻</div>
-  <p>旋转至横屏效果更佳</p>
+  <p>请旋转手机至横屏</p>
+  <div class="rotate-sub">横屏模式下游戏体验最佳</div>
 </div>
 <div id="game-wrapper">
   <canvas id="gameCanvas" width="800" height="480"></canvas>
@@ -1920,12 +1921,16 @@ async function lockLandscape(){
 function handleStartClick(){initAudio();if(GAME.gameState==='start'||GAME.gameState==='gameover'){lockLandscape().then(()=>{startGame();});}}
 function handleRestartClick(){restartGame();}
 
+// JS方向检测——作为CSS media query的补充，适配更多移动浏览器
+function checkOrientation(){const hint=document.getElementById('rotate-hint');if(!hint)return;const isPortrait=window.innerWidth<window.innerHeight;if(isPortrait){hint.style.display='flex';}else{hint.style.display='none';}}
+window.addEventListener('orientationchange',checkOrientation);window.addEventListener('resize',checkOrientation);
+
 // Canvas auto-scales via CSS (max-width:100vw, max-height:100vh, object-fit:contain)
 
 // Initialization
 window.onload=function(){
   const canvas=document.getElementById('gameCanvas');if(canvas){canvas.width=CANVAS_W*DPR;canvas.height=CANVAS_H*DPR;}
-  initPools();initInput();createPlayer();initGameLoop();drawPreviewShip();
+  initPools();initInput();createPlayer();initGameLoop();drawPreviewShip();checkOrientation();
   // Show start screen
   document.getElementById('start-screen').style.display='flex';
   document.getElementById('gameover-screen').style.display='none';
