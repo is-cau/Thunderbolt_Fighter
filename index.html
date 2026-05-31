@@ -120,24 +120,24 @@ canvas {
   #start-btn { padding:8px 35px; font-size:15px; }
   .start-hint { font-size:10px; margin-top:8px; }
 }
-/* 竖屏旋转提示 — 轻量提示，不阻止游戏 */
+/* 竖屏旋转提示 —— 全屏居中醒目大字 */
 @media (orientation: portrait) {
   #rotate-hint { display:flex; }
-  #game-wrapper { opacity:0.65; }
 }
 @media (orientation: landscape) {
   #rotate-hint { display:none; }
-  #game-wrapper { opacity:1; }
 }
 #rotate-hint {
-  display:none; position:fixed; bottom:max(30px,env(safe-area-inset-bottom,30px)); left:50%; transform:translateX(-50%);
-  z-index:199; background:rgba(26,10,62,0.85); border-radius:20px; padding:8px 18px;
-  pointer-events:none;
-  flex-direction:row; justify-content:center; align-items:center; gap:8px;
+  display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; height:100dvh;
+  z-index:210; background:rgba(10,5,30,0.93);
+  flex-direction:column; justify-content:center; align-items:center;
   color:#FFE156; font-family:'Segoe UI','Microsoft YaHei',sans-serif;
+  pointer-events:none; text-align:center; padding:30px;
 }
-#rotate-hint .rotate-icon { font-size:20px; animation:float 1.5s ease-in-out infinite; }
-#rotate-hint p { font-size:12px; letter-spacing:1px; text-shadow:0 0 10px rgba(255,225,86,0.4); }
+#rotate-hint .rotate-icon { font-size:80px; animation:float 1.5s ease-in-out infinite; margin-bottom:28px; }
+#rotate-hint p { font-size:26px; font-weight:bold; letter-spacing:3px; text-shadow:0 0 20px rgba(255,225,86,0.6); margin-bottom:12px; }
+#rotate-hint .rotate-sub { font-size:16px; color:rgba(255,255,255,0.7); margin-bottom:20px; line-height:1.6; }
+#rotate-hint .rotate-lock { font-size:14px; color:#FFB5C2; background:rgba(255,181,194,0.12); border:1px solid rgba(255,181,194,0.3); border-radius:12px; padding:10px 22px; margin-top:6px; letter-spacing:1px; }
 </style>
 </head>
 <body>
@@ -145,7 +145,8 @@ canvas {
 <div id="rotate-hint">
   <div class="rotate-icon">📱↻</div>
   <p>请旋转手机至横屏</p>
-  <div class="rotate-sub">横屏模式下游戏体验最佳</div>
+  <div class="rotate-sub">横屏模式游戏体验最佳</div>
+  <div class="rotate-lock">⚠ 请确认已关闭手机的方向锁定</div>
 </div>
 <div id="game-wrapper">
   <canvas id="gameCanvas" width="800" height="480"></canvas>
