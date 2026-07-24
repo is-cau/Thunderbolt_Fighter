@@ -556,7 +556,10 @@ function findDead(pool){for(let i=0;i<pool.length;i++){if(!pool[i].active)return
 
 function acquireBullet(pool,x,y,vx,vy,damage){
   const b=findDead(pool);if(!b)return null;
-  b.active=true;b.x=x;b.y=y;b.vx=vx;b.vy=vy;b.damage=damage||1;return b;
+  const enemyPool=pool===GAME.enemyBullets;
+  b.active=true;b.x=x;b.y=y;b.vx=vx;b.vy=vy;b.damage=damage||1;
+  b.w=enemyPool?8:6;b.h=enemyPool?8:12;b.radius=enemyPool?4:3;
+  b._bossBullet=false;b._homing=false;b._homingLife=0;b._expanding=false;b._expandSpd=0;b.visualKind='';return b;
 }
 
 function acquireEnemy(x,y,enemyType){
@@ -569,7 +572,7 @@ function acquireEnemy(x,y,enemyType){
 function acquireParticle(x,y,vx,vy,color,size,life){
   const p=findDead(GAME.particles);if(!p)return null;
   p.active=true;p.x=x;p.y=y;p.vx=vx||0;p.vy=vy||0;
-  p.color=color||'#fff';p.size=size||4;p.radius=(size||4)/2;
+  p.color=color||'#fff';p.size=size||4;p.baseSize=p.size;p.radius=(size||4)/2;
   p.life=life||0.5;p.maxLife=p.life;p.alpha=1;
   p.rotation=Math.random()*Math.PI*2;p.rotationSpeed=(Math.random()-0.5)*10;
   p.isStar=false;p.isSpark=false;p.isRing=false;return p;
@@ -849,7 +852,7 @@ function updateParticles(dt){
     const p=GAME.particles[i];if(!p.active)continue;
     p.x+=p.vx*dt;p.y+=p.vy*dt;p.rotation+=p.rotationSpeed*dt;p.life-=dt;
     if(p.life<=0){p.active=false;}
-    else{p.alpha=Math.max(0,p.life/p.maxLife);if(!p.isRing)p.size=(p.life/p.maxLife)*p.size;}
+    else{p.alpha=Math.max(0,p.life/p.maxLife);}
   }
 }
 
@@ -1504,40 +1507,45 @@ function drawMoonPlanet(ctx,p){
 // ============================================================================
 // SECTION 13: RENDERER — Player, Enemies, Bullets, PowerUps
 // ============================================================================
+function fillAndInk(ctx,fill,stroke,width){ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke||COLORS.charcoal;ctx.lineWidth=width||2;ctx.lineJoin='round';ctx.stroke();}
+
 function drawPlayer(ctx,x,y){
   if(!GAME.player)return;const inv=GAME.player.invincible;
-  if(inv&&Math.floor((GAME.time||0)*20)%2===0){ctx.save();ctx.globalAlpha=0.25;}else ctx.save();
-  ctx.translate(x,y);ctx.scale(0.55,0.55);const t=GAME.time||0;
-  // Engine glow
-  const ef=0.7+0.3*Math.sin(t*15),es=8+Math.sin(t*12)*3;
-  const eg=ctx.createRadialGradient(0,22,1,0,20,es*2);eg.addColorStop(0,rgba(COLORS.mint,0.9*ef));eg.addColorStop(0.4,rgba(COLORS.mint,0.5*ef));eg.addColorStop(1,rgba(COLORS.mint,0));ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,20,es*2,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=rgba(COLORS.white,0.8*ef);ctx.beginPath();ctx.moveTo(-4,16);ctx.lineTo(0,16+es);ctx.lineTo(4,16);ctx.closePath();ctx.fill();
-  // Body shadow
-  ctx.fillStyle='rgba(0,0,0,0.1)';ctx.beginPath();ctx.ellipse(0,2,16,21,0,0,Math.PI*2);ctx.fill();
-  // Body teardrop
-  const bg=ctx.createRadialGradient(-2,-5,2,0,0,19);bg.addColorStop(0,COLORS.softWhite);bg.addColorStop(0.3,COLORS.blushPink);bg.addColorStop(0.7,COLORS.pink);bg.addColorStop(1,COLORS.roseGold);ctx.fillStyle=bg;
-  ctx.beginPath();ctx.moveTo(0,-21);ctx.bezierCurveTo(16,-20,19,-6,17,8);ctx.bezierCurveTo(15,18,8,20,0,20);ctx.bezierCurveTo(-8,20,-15,18,-17,8);ctx.bezierCurveTo(-19,-6,-16,-20,0,-21);ctx.closePath();ctx.fill();
-  ctx.strokeStyle=COLORS.darkPink;ctx.lineWidth=1.2;ctx.stroke();
-  // Cat ears
-  ctx.fillStyle=COLORS.hotPink;ctx.beginPath();ctx.moveTo(-14,-10);ctx.lineTo(-19,-23);ctx.lineTo(-7,-18);ctx.closePath();ctx.fill();ctx.strokeStyle=COLORS.darkPink;ctx.lineWidth=0.8;ctx.stroke();
-  ctx.fillStyle=COLORS.blushPink;ctx.beginPath();ctx.moveTo(-13,-10);ctx.lineTo(-16,-21);ctx.lineTo(-9,-16);ctx.closePath();ctx.fill();
-  ctx.fillStyle=COLORS.hotPink;ctx.beginPath();ctx.moveTo(14,-10);ctx.lineTo(19,-23);ctx.lineTo(7,-18);ctx.closePath();ctx.fill();ctx.stroke();
-  ctx.fillStyle=COLORS.blushPink;ctx.beginPath();ctx.moveTo(13,-10);ctx.lineTo(16,-21);ctx.lineTo(9,-16);ctx.closePath();ctx.fill();
-  // Wing extensions
-  if(GAME.player.powerLevel>1){
-    ctx.fillStyle=COLORS.lavender;ctx.beginPath();ctx.moveTo(-16,-2);ctx.lineTo(-24,-5);ctx.lineTo(-26,2);ctx.lineTo(-22,8);ctx.lineTo(-17,6);ctx.closePath();ctx.fill();ctx.strokeStyle=COLORS.purple;ctx.lineWidth=0.7;ctx.stroke();
-    ctx.fillStyle=COLORS.lavender;ctx.beginPath();ctx.moveTo(16,-2);ctx.lineTo(24,-5);ctx.lineTo(26,2);ctx.lineTo(22,8);ctx.lineTo(17,6);ctx.closePath();ctx.fill();ctx.stroke();
-  }
-  // Cockpit
-  const cg=ctx.createRadialGradient(0,-1,1,0,-2,9);cg.addColorStop(0,COLORS.white);cg.addColorStop(0.6,COLORS.skyLight);cg.addColorStop(1,COLORS.lavender);ctx.fillStyle=cg;ctx.beginPath();ctx.ellipse(0,-2,8,11,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=rgba(COLORS.white,0.6);ctx.beginPath();ctx.ellipse(-2,-6,3,5,-0.2,0,Math.PI*2);ctx.fill();
-  // Eyes
-  const eox=5;ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.ellipse(-eox,-4,5.5,6.5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.darkPurple;ctx.beginPath();ctx.ellipse(-eox+0.5,-3.5,3.2,3.8,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-eox-1.5,-6,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(-eox+1.5,-5.5,0.7,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.ellipse(eox,-4,5.5,6.5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.darkPurple;ctx.beginPath();ctx.ellipse(eox+0.5,-3.5,3.2,3.8,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(eox-1.5,-6,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(eox+1.5,-5.5,0.7,0,Math.PI*2);ctx.fill();
-  // Blush
-  ctx.fillStyle=rgba(COLORS.coral,0.5);ctx.beginPath();ctx.ellipse(-7,1,3.5,2.5,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(7,1,3.5,2.5,0,0,Math.PI*2);ctx.fill();
-  // Smile
-  ctx.strokeStyle=COLORS.berry;ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,-0.5,3,0.2,Math.PI-0.2);ctx.stroke();
+  ctx.save();if(inv&&Math.floor((GAME.time||0)*20)%2===0)ctx.globalAlpha=0.25;
+  drawPlayerArt(ctx,x,y,0.62,GAME.time||0,GAME.player.powerLevel||1);ctx.restore();
+}
+
+function drawPlayerArt(ctx,x,y,scale,t,powerLevel){
+  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);ctx.rotate(Math.sin(t*4)*0.018);
+  const flame=8+Math.sin(t*14)*3;
+  const glow=ctx.createRadialGradient(0,22,1,0,22,20);glow.addColorStop(0,rgba(COLORS.gold,0.72));glow.addColorStop(0.45,rgba(COLORS.coral,0.34));glow.addColorStop(1,rgba(COLORS.coral,0));ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,22,20,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=COLORS.gold;ctx.beginPath();ctx.moveTo(-5,17);ctx.quadraticCurveTo(0,22+flame,5,17);ctx.closePath();ctx.fill();
+  ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.moveTo(-2.5,18);ctx.quadraticCurveTo(0,20+flame*.65,2.5,18);ctx.closePath();ctx.fill();
+
+  // Mint scarf and painted wings sit behind the pilot capsule.
+  ctx.beginPath();ctx.moveTo(-12,-1);ctx.bezierCurveTo(-24,2,-27,9,-34,5);ctx.lineTo(-27,13);ctx.bezierCurveTo(-20,12,-15,8,-9,7);ctx.closePath();fillAndInk(ctx,COLORS.mint,COLORS.charcoal,2.2);
+  ctx.beginPath();ctx.moveTo(12,-1);ctx.bezierCurveTo(22,0,26,7,32,4);ctx.lineTo(25,13);ctx.bezierCurveTo(19,12,14,8,9,7);ctx.closePath();fillAndInk(ctx,powerLevel>1?COLORS.skyBlue:COLORS.coral,COLORS.charcoal,2.2);
+  if(powerLevel>2){ctx.fillStyle=COLORS.gold;drawStar5(ctx,-28,4,4.5,2,COLORS.gold,t*2);drawStar5(ctx,27,5,4.5,2,COLORS.gold,-t*2);}
+
+  ctx.fillStyle='rgba(6,21,31,0.24)';ctx.beginPath();ctx.ellipse(2,5,19,23,-.06,0,Math.PI*2);ctx.fill();
+  const body=ctx.createLinearGradient(-14,-20,15,22);body.addColorStop(0,COLORS.peach);body.addColorStop(.45,COLORS.coral);body.addColorStop(1,COLORS.darkPink);
+  ctx.beginPath();ctx.moveTo(0,-23);ctx.bezierCurveTo(15,-22,20,-8,17,8);ctx.bezierCurveTo(15,19,8,23,0,22);ctx.bezierCurveTo(-9,23,-16,18,-18,8);ctx.bezierCurveTo(-20,-8,-15,-22,0,-23);ctx.closePath();fillAndInk(ctx,body,COLORS.charcoal,2.5);
+
+  // Cream cat pilot with oversized ears.
+  ctx.beginPath();ctx.moveTo(-11,-13);ctx.lineTo(-16,-27);ctx.lineTo(-5,-20);ctx.closePath();fillAndInk(ctx,COLORS.butter,COLORS.charcoal,2.2);
+  ctx.beginPath();ctx.moveTo(11,-13);ctx.lineTo(16,-27);ctx.lineTo(5,-20);ctx.closePath();fillAndInk(ctx,COLORS.butter,COLORS.charcoal,2.2);
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.moveTo(-12,-18);ctx.lineTo(-14,-24);ctx.lineTo(-8,-20);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(12,-18);ctx.lineTo(14,-24);ctx.lineTo(8,-20);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.ellipse(0,-7,13.5,14.5,0,0,Math.PI*2);fillAndInk(ctx,COLORS.softWhite,COLORS.charcoal,2.2);
+  ctx.strokeStyle=rgba(COLORS.peach,.9);ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-8,-15);ctx.quadraticCurveTo(-4,-19,1,-18);ctx.stroke();
+  for(const ex of [-4.5,4.5]){ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.ellipse(ex,-8,2.3,3.2,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(ex-.7,-9.2,.8,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.moveTo(0,-4);ctx.lineTo(-2.1,-6);ctx.lineTo(2.1,-6);ctx.closePath();ctx.fill();
+  ctx.strokeStyle=COLORS.berry;ctx.lineWidth=1.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(0,-4);ctx.quadraticCurveTo(-2,-1,-4,-2);ctx.moveTo(0,-4);ctx.quadraticCurveTo(2,-1,4,-2);ctx.stroke();
+  ctx.fillStyle=rgba(COLORS.coral,.45);ctx.beginPath();ctx.ellipse(-8,-3,3,1.7,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(8,-3,3,1.7,0,0,Math.PI*2);ctx.fill();
+
+  // Tiny painted envelope badge.
+  ctx.beginPath();roundRect(ctx,-6,7,12,9,2);fillAndInk(ctx,COLORS.butter,COLORS.charcoal,1.5);
+  ctx.strokeStyle=COLORS.coral;ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(-5,8);ctx.lineTo(0,12);ctx.lineTo(5,8);ctx.stroke();
+  ctx.strokeStyle=rgba(COLORS.white,.55);ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(-13,-6);ctx.quadraticCurveTo(-14,2,-11,8);ctx.stroke();
   ctx.restore();
 }
 
@@ -1568,89 +1576,67 @@ function drawEnemy(ctx,enemy){
 }
 
 function drawBasicEnemy(ctx,x,y){
-  ctx.save();ctx.translate(x,y);ctx.scale(0.55,0.55);const t=GAME.time||0;const sq=Math.sin(t*3)*0.1;ctx.scale(1+sq,1-sq);
-  ctx.fillStyle='rgba(0,0,0,0.12)';ctx.beginPath();ctx.arc(0,2,17,0,Math.PI*2);ctx.fill();
-  const bg=ctx.createRadialGradient(-3,-4,3,0,0,17);bg.addColorStop(0,COLORS.white);bg.addColorStop(0.4,COLORS.lavender);bg.addColorStop(1,COLORS.purple);ctx.fillStyle=bg;ctx.beginPath();ctx.arc(0,0,16,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.stroke();
-  ctx.fillStyle=rgba(COLORS.white,0.4);ctx.beginPath();ctx.ellipse(-4,-6,5,7,-0.3,0,Math.PI*2);ctx.fill();
-  // Angry brows
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2.2;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(-9,-5);ctx.lineTo(-3.5,-2.5);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(9,-5);ctx.lineTo(3.5,-2.5);ctx.stroke();
-  // Eyes
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-5,0,2.8,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(5,0,2.8,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-4,-1,1,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(6,-1,1,0,Math.PI*2);ctx.fill();
-  // Frown
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(0,7,3.5,0.15,Math.PI-0.15);ctx.stroke();
-  ctx.restore();
+  ctx.save();ctx.translate(x,y);ctx.scale(.58,.58);const t=GAME.time||0;ctx.rotate(Math.sin(t*2.5+x)*.025);
+  ctx.fillStyle='rgba(6,21,31,.24)';ctx.beginPath();ctx.ellipse(2,5,17,12,0,0,Math.PI*2);ctx.fill();
+  const cloud=ctx.createLinearGradient(-14,-14,16,16);cloud.addColorStop(0,COLORS.lavender);cloud.addColorStop(.55,'#7ea2b5');cloud.addColorStop(1,'#58758e');
+  ctx.beginPath();ctx.moveTo(-16,8);ctx.bezierCurveTo(-22,2,-18,-7,-11,-8);ctx.bezierCurveTo(-11,-17,2,-20,7,-12);ctx.bezierCurveTo(16,-15,22,-7,18,1);ctx.bezierCurveTo(24,8,15,15,8,12);ctx.bezierCurveTo(2,18,-9,16,-12,11);ctx.closePath();fillAndInk(ctx,cloud,COLORS.charcoal,2.8);
+  ctx.strokeStyle=rgba(COLORS.white,.35);ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-11,-7);ctx.quadraticCurveTo(-5,-13,2,-12);ctx.stroke();
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(-9,-4);ctx.lineTo(-3,-1);ctx.moveTo(9,-4);ctx.lineTo(3,-1);ctx.stroke();
+  for(const ex of [-5,5]){ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(ex,1,2.6,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(ex-.7,.1,.8,0,Math.PI*2);ctx.fill();}
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(0,8,4,Math.PI+.25,Math.PI*2-.25);ctx.stroke();
+  ctx.fillStyle=rgba(COLORS.coral,.32);ctx.beginPath();ctx.ellipse(-10,6,3,1.6,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(10,6,3,1.6,0,0,Math.PI*2);ctx.fill();ctx.restore();
 }
 
 function drawFastEnemy(ctx,x,y){
-  ctx.save();ctx.translate(x,y);ctx.scale(0.55,0.55);const t=GAME.time||0;
-  ctx.fillStyle='rgba(0,0,0,0.1)';ctx.beginPath();ctx.ellipse(0,2,11,13,0,0,Math.PI*2);ctx.fill();
-  const bg=ctx.createRadialGradient(-2,-3,2,0,-1,12);bg.addColorStop(0,COLORS.peach);bg.addColorStop(0.5,COLORS.coral);bg.addColorStop(1,'#E87882');ctx.fillStyle=bg;
-  ctx.beginPath();ctx.moveTo(0,14);ctx.bezierCurveTo(-8,14,-11,6,-11,-3);ctx.bezierCurveTo(-11,-10,-6,-13,0,-13);ctx.bezierCurveTo(6,-13,11,-10,11,-3);ctx.bezierCurveTo(11,6,8,14,0,14);ctx.closePath();ctx.fill();
-  ctx.strokeStyle='#C06068';ctx.lineWidth=1.2;ctx.stroke();
-  // Wings
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.moveTo(-11,-4);ctx.lineTo(-19,-8);ctx.lineTo(-17,-1);ctx.lineTo(-11,2);ctx.closePath();ctx.fill();ctx.stroke();
-  ctx.beginPath();ctx.moveTo(11,-4);ctx.lineTo(19,-8);ctx.lineTo(17,-1);ctx.lineTo(11,2);ctx.closePath();ctx.fill();ctx.stroke();
-  // Cyclops eye
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.ellipse(0,-3,5,5.5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.darkPurple;ctx.beginPath();ctx.arc(0,-2.5,3,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-2,-5,1.6,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(2,-4.5,0.7,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-5,-9);ctx.lineTo(5,-9);ctx.stroke();
-  // Determined mouth
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(0,4,1.5,Math.PI,Math.PI*2);ctx.fill();
-  ctx.restore();
+  ctx.save();ctx.translate(x,y);ctx.scale(.58,.58);const t=GAME.time||0;ctx.rotate(Math.sin(t*7+y)*.08);
+  // Dry-brush comet tail.
+  ctx.strokeStyle=rgba(COLORS.gold,.62);ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-7,-10);ctx.lineTo(-14,-24);ctx.moveTo(5,-11);ctx.lineTo(9,-27);ctx.stroke();
+  ctx.strokeStyle=rgba(COLORS.softWhite,.72);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-5,-12);ctx.lineTo(-10,-22);ctx.moveTo(6,-13);ctx.lineTo(8,-23);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,17);ctx.bezierCurveTo(-13,9,-14,-4,-8,-13);ctx.lineTo(-14,-18);ctx.lineTo(-3,-16);ctx.bezierCurveTo(4,-19,13,-10,12,1);ctx.bezierCurveTo(11,9,7,14,0,17);ctx.closePath();
+  const comet=ctx.createLinearGradient(-9,-15,10,16);comet.addColorStop(0,COLORS.peach);comet.addColorStop(.48,COLORS.coral);comet.addColorStop(1,COLORS.darkPink);fillAndInk(ctx,comet,COLORS.charcoal,2.5);
+  ctx.fillStyle=COLORS.butter;ctx.beginPath();ctx.ellipse(0,-2,6.5,7.5,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.6;ctx.stroke();
+  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.ellipse(0,-3,2.7,3.5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-.8,-4.2,.9,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-5,-10);ctx.lineTo(4,-8);ctx.stroke();
+  ctx.strokeStyle=rgba(COLORS.white,.45);ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(-8,-5);ctx.quadraticCurveTo(-7,5,-2,10);ctx.stroke();ctx.restore();
 }
 
 function drawTankEnemy(ctx,x,y,hp,maxHp){
-  ctx.save();ctx.translate(x,y);ctx.scale(0.55,0.55);
-  ctx.fillStyle='rgba(0,0,0,0.12)';roundRect(ctx,-1,3,46,46,9);ctx.fill();
-  const bg=ctx.createLinearGradient(-22,-22,22,22);bg.addColorStop(0,COLORS.mint);bg.addColorStop(0.6,COLORS.darkMint);bg.addColorStop(1,'#5DA88A');ctx.fillStyle=bg;roundRect(ctx,-22,-22,44,44,10);ctx.fill();
-  ctx.strokeStyle='#4A9A78';ctx.lineWidth=2;roundRect(ctx,-22,-22,44,44,10);ctx.stroke();
-  ctx.fillStyle=rgba(COLORS.white,0.2);roundRect(ctx,-16,-16,32,32,7);ctx.fill();
-  // :3 face
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-7,-5,2.8,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(7,-5,2.8,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-6.5,-6.2,0.9,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(7.5,-6.2,0.9,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.arc(-3,4,3,Math.PI*0.8,Math.PI*2.2);ctx.stroke();ctx.beginPath();ctx.arc(3,4,3,Math.PI*0.8,Math.PI*2.2);ctx.stroke();
-  // Shield icon
-  ctx.fillStyle=COLORS.lavender;ctx.beginPath();ctx.moveTo(10,-8);ctx.lineTo(10,4);ctx.quadraticCurveTo(5,12,0,14);ctx.quadraticCurveTo(-5,12,-10,4);ctx.lineTo(-10,-8);ctx.closePath();ctx.fill();ctx.strokeStyle=COLORS.purple;ctx.lineWidth=1.5;ctx.stroke();
-  // HP bar
-  if(hp!==undefined&&maxHp!==undefined)drawHpBar(ctx,0,-32,36,hp,maxHp);
-  ctx.restore();
+  ctx.save();ctx.translate(x,y);ctx.scale(.55,.55);const t=GAME.time||0;ctx.rotate(Math.sin(t*2+x)*.018);
+  ctx.fillStyle='rgba(6,21,31,.25)';ctx.beginPath();roundRect(ctx,-19,-17,46,46,8);ctx.fill();
+  const parcel=ctx.createLinearGradient(-22,-22,22,22);parcel.addColorStop(0,'#b8efd7');parcel.addColorStop(.55,COLORS.mint);parcel.addColorStop(1,COLORS.darkMint);
+  ctx.beginPath();roundRect(ctx,-22,-22,44,44,7);fillAndInk(ctx,parcel,COLORS.charcoal,3);
+  // Parcel ribbon and wax seal.
+  ctx.fillStyle=COLORS.butter;ctx.fillRect(-5,-21,10,42);ctx.fillRect(-21,-5,42,10);
+  ctx.strokeStyle=rgba(COLORS.white,.55);ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-17,-16);ctx.lineTo(-9,-16);ctx.stroke();
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2;ctx.stroke();
+  for(const ex of [-3,3]){ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(ex,-1.5,1.7,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(ex-.45,-2,.5,0,Math.PI*2);ctx.fill();}
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(-2,3,2.2,.45,Math.PI-.15);ctx.stroke();ctx.beginPath();ctx.arc(2,3,2.2,.15,Math.PI-.45);ctx.stroke();
+  // Tied bow establishes the heavy enemy silhouette.
+  ctx.beginPath();ctx.moveTo(-4,-20);ctx.quadraticCurveTo(-15,-30,-16,-18);ctx.quadraticCurveTo(-12,-11,-2,-17);ctx.closePath();fillAndInk(ctx,COLORS.coral,COLORS.charcoal,2);
+  ctx.beginPath();ctx.moveTo(4,-20);ctx.quadraticCurveTo(15,-30,16,-18);ctx.quadraticCurveTo(12,-11,2,-17);ctx.closePath();fillAndInk(ctx,COLORS.coral,COLORS.charcoal,2);
+  if(hp!==undefined&&maxHp!==undefined)drawHpBar(ctx,0,-32,38,hp,maxHp);ctx.restore();
 }
 
 // Swarmer — tiny fast enemy, cute bee-like
 function drawSwarmerEnemy(ctx,x,y){
-  ctx.save();ctx.translate(x,y);ctx.scale(0.55,0.55);const t=GAME.time||0;
-  const bob=Math.sin(t*8)*2;
-  ctx.fillStyle='rgba(0,0,0,0.1)';ctx.beginPath();ctx.arc(0,bob+1,9,0,Math.PI*2);ctx.fill();
-  const bg=ctx.createRadialGradient(-1,-2,1,0,0,9);bg.addColorStop(0,COLORS.butter);bg.addColorStop(0.5,COLORS.gold);bg.addColorStop(1,COLORS.peach);ctx.fillStyle=bg;ctx.beginPath();ctx.arc(0,bob,8,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1;ctx.stroke();
-  // Tiny wings
-  ctx.fillStyle=rgba(COLORS.white,0.7);
-  ctx.beginPath();ctx.ellipse(-7,bob-2,4,2.5,-0.3,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(7,bob-2,4,2.5,0.3,0,Math.PI*2);ctx.fill();
-  // Eyes
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-2.5,bob-1,1.8,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(2.5,bob-1,1.8,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-2,bob-1.5,0.6,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(3,bob-1.5,0.6,0,Math.PI*2);ctx.fill();
-  ctx.restore();
+  ctx.save();ctx.translate(x,y);ctx.scale(.58,.58);const t=GAME.time||0,bob=Math.sin(t*9+x)*1.5;ctx.translate(0,bob);ctx.rotate(Math.sin(t*7)*.12);
+  ctx.fillStyle=rgba(COLORS.softWhite,.72);ctx.beginPath();ctx.ellipse(-7,-3,5,3,-.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(7,-3,5,3,.5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();drawStar5Path(ctx,0,0,9,5,t*.8);fillAndInk(ctx,COLORS.gold,COLORS.charcoal,2);
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.arc(0,0,3.7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-1.3,-.5,.8,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(1.3,-.5,.8,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=rgba(COLORS.white,.55);ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(-3,-5);ctx.lineTo(0,-7);ctx.stroke();ctx.restore();
 }
 // Splitter — medium enemy that splits into swarmers on death, star-shaped
 function drawSplitterEnemy(ctx,x,y){
-  ctx.save();ctx.translate(x,y);ctx.scale(0.55,0.55);const t=GAME.time||0;
-  const rot=t*2;
-  ctx.fillStyle='rgba(0,0,0,0.1)';ctx.beginPath();ctx.arc(0,2,18,0,Math.PI*2);ctx.fill();
-  // Star body
-  const bg=ctx.createRadialGradient(-2,-3,2,0,0,17);bg.addColorStop(0,COLORS.lavender);bg.addColorStop(0.5,COLORS.skyBlue);bg.addColorStop(1,COLORS.purple);ctx.fillStyle=bg;
-  drawStar5(ctx,0,0,15,7,bg,rot);ctx.fillStyle=bg;drawStar5(ctx,0,0,15,7,COLORS.lavender,rot);
-  ctx.fillStyle=bg;ctx.beginPath();drawStar5Path(ctx,0,0,15,7,rot);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.stroke();
-  // Center face
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(0,-2,5,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-1.5,-2,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(1.5,-2,1.5,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-1.2,-2.8,0.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(1.8,-2.8,0.5,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,2,2,0.2,Math.PI-0.2);ctx.stroke();
-  ctx.restore();
+  ctx.save();ctx.translate(x,y);ctx.scale(.64,.64);const t=GAME.time||0,rot=t*.7;
+  ctx.fillStyle='rgba(6,21,31,.22)';ctx.beginPath();ctx.arc(2,3,17,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();drawStar5Path(ctx,0,0,15,8,rot);fillAndInk(ctx,COLORS.skyBlue,COLORS.charcoal,2.7);
+  ctx.save();ctx.rotate(rot);ctx.strokeStyle=rgba(COLORS.white,.42);ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-7,-8);ctx.lineTo(-2,-11);ctx.stroke();ctx.restore();
+  // Painted crack hints that this parcel will split.
+  ctx.strokeStyle=COLORS.berry;ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-1,-10);ctx.lineTo(3,-4);ctx.lineTo(-1,1);ctx.lineTo(4,8);ctx.stroke();
+  ctx.fillStyle=COLORS.butter;ctx.beginPath();ctx.arc(-5,-1,3.1,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(5,-1,3.1,0,Math.PI*2);ctx.fill();
+  for(const ex of [-5,5]){ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(ex,-1,1.6,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(ex-.45,-1.6,.5,0,Math.PI*2);ctx.fill();}
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(0,5,3,.2,Math.PI-.2);ctx.stroke();ctx.restore();
 }
 // Helper: 5-point star path (for fill+stroke)
 function drawStar5Path(ctx,cx,cy,outerR,innerR,rotation){
@@ -1660,93 +1646,82 @@ function drawStar5Path(ctx,cx,cy,outerR,innerR,rotation){
 }
 
 function drawBoss(ctx,x,y,hp,maxHp){
-  ctx.save();ctx.translate(x,y);ctx.scale(1.6,1.6);const t=GAME.time||0;const w=80,h=56;
-  if(hp!==undefined&&maxHp!==undefined)drawHpBar(ctx,0,-h/2-16,w*0.9,hp,maxHp);
-  const dmgA=(hp&&maxHp&&hp<maxHp*0.5)?0.25+0.05*Math.sin(t*8):0;
-  // Shadow
-  ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(0,h/2+3,w/2-2,10,0,0,Math.PI*2);ctx.fill();
-  // Body glow
-  const glow=ctx.createRadialGradient(0,0,w*0.3,0,0,w*0.7);glow.addColorStop(0,rgba(COLORS.pink,0.15));glow.addColorStop(1,rgba(COLORS.pink,0));ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,w*0.7,0,Math.PI*2);ctx.fill();
-  // Main body — cat head
-  const bg=ctx.createRadialGradient(-5,-h*0.2,5,0,0,w/2);bg.addColorStop(0,COLORS.white);bg.addColorStop(0.25,COLORS.blushPink);bg.addColorStop(0.5,COLORS.pink);bg.addColorStop(0.8,COLORS.darkPink);bg.addColorStop(1,COLORS.berry);ctx.fillStyle=bg;
-  ctx.beginPath();ctx.moveTo(0,h/2+5);ctx.bezierCurveTo(w*0.45,h*0.6,w*0.48,h*0.1,w*0.32,-h*0.15);ctx.bezierCurveTo(w*0.35,-h*0.4,w*0.15,-h*0.5,0,-h*0.5);ctx.bezierCurveTo(-w*0.15,-h*0.5,-w*0.35,-h*0.4,-w*0.32,-h*0.15);ctx.bezierCurveTo(-w*0.48,h*0.1,-w*0.45,h*0.6,0,h/2+5);ctx.closePath();ctx.fill();
-  ctx.strokeStyle=COLORS.berry;ctx.lineWidth=3;ctx.stroke();
-  // Inner face lighter area
-  ctx.fillStyle=rgba(COLORS.white,0.3);ctx.beginPath();ctx.ellipse(0,-h*0.05,w*0.25,h*0.35,0,0,Math.PI*2);ctx.fill();
-  // Ears with animation
-  const earBob=Math.sin(t*4)*2;
-  ctx.fillStyle=COLORS.lavender;ctx.beginPath();ctx.moveTo(-w*0.25,-h*0.4+earBob);ctx.lineTo(-w*0.38,-h*0.75+earBob);ctx.lineTo(-w*0.12,-h*0.42+earBob);ctx.closePath();ctx.fill();ctx.strokeStyle=COLORS.berry;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=COLORS.hotPink;ctx.beginPath();ctx.moveTo(-w*0.22,-h*0.38+earBob);ctx.lineTo(-w*0.33,-h*0.68+earBob);ctx.lineTo(-w*0.15,-h*0.39+earBob);ctx.closePath();ctx.fill();
-  ctx.fillStyle=COLORS.lavender;ctx.beginPath();ctx.moveTo(w*0.25,-h*0.4-earBob);ctx.lineTo(w*0.38,-h*0.75-earBob);ctx.lineTo(w*0.12,-h*0.42-earBob);ctx.closePath();ctx.fill();ctx.stroke();ctx.fillStyle=COLORS.hotPink;ctx.beginPath();ctx.moveTo(w*0.22,-h*0.38-earBob);ctx.lineTo(w*0.33,-h*0.68-earBob);ctx.lineTo(w*0.15,-h*0.39-earBob);ctx.closePath();ctx.fill();
-  // Eyes — angry red glow when damaged
-  const eyeGlow=dmgA>0?COLORS.coral:COLORS.darkPurple;
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.ellipse(-w*0.14,-h*0.15,13,14,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(w*0.14,-h*0.15,13,14,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=eyeGlow;ctx.beginPath();ctx.arc(-w*0.14,-h*0.13,7,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(w*0.14,-h*0.13,7,0,Math.PI*2);ctx.fill();
-  // Pupils
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-w*0.14,-h*0.13,3.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(w*0.14,-h*0.13,3.5,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-w*0.17,-h*0.21,4,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(w*0.11,-h*0.21,4,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.arc(-w*0.12,-h*0.18,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(w*0.16,-h*0.18,1.5,0,Math.PI*2);ctx.fill();
-  // Angry brows when damaged
-  if(dmgA>0){ctx.strokeStyle=COLORS.berry;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(-w*0.25,-h*0.32);ctx.lineTo(-w*0.1,-h*0.25);ctx.stroke();ctx.beginPath();ctx.moveTo(w*0.25,-h*0.32);ctx.lineTo(w*0.1,-h*0.25);ctx.stroke();}
-  // Whiskers
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.lineCap='round';ctx.globalAlpha=0.4;
-  for(let side=-1;side<=1;side+=2){let wx=side*w*0.08,wy=-h*0.02;ctx.beginPath();ctx.moveTo(wx,wy);ctx.lineTo(wx+side*18,wy-10);ctx.stroke();ctx.beginPath();ctx.moveTo(wx+side*1,wy+3);ctx.lineTo(wx+side*20,wy+0);ctx.stroke();ctx.beginPath();ctx.moveTo(wx,wy+6);ctx.lineTo(wx+side*17,wy+12);ctx.stroke();}
-  ctx.globalAlpha=1;
-  // :3 mouth
-  ctx.fillStyle=COLORS.charcoal;ctx.beginPath();ctx.arc(-4,10,2.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(4,10,2.5,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.arc(-8,9,8,Math.PI*0.5,0);ctx.stroke();ctx.beginPath();ctx.arc(8,9,8,Math.PI,Math.PI*0.5);ctx.stroke();
-  // Crown/tiara on top
-  ctx.fillStyle=COLORS.gold;ctx.beginPath();ctx.moveTo(-6,-h*0.52);ctx.lineTo(-8,-h*0.65);ctx.lineTo(-3,-h*0.57);ctx.lineTo(0,-h*0.7);ctx.lineTo(3,-h*0.57);ctx.lineTo(8,-h*0.65);ctx.lineTo(6,-h*0.52);ctx.closePath();ctx.fill();ctx.strokeStyle=COLORS.berry;ctx.lineWidth=1;ctx.stroke();
-  // Turrets — rotating
-  const turretRot=Math.sin(t*2)*0.3;
-  ctx.save();ctx.translate(-w*0.32,h*0.05);ctx.rotate(turretRot);ctx.fillStyle=COLORS.purple;ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1;ctx.stroke();ctx.fillStyle=COLORS.charcoal;roundRect(ctx,-14,-2.5,13,5,2);ctx.fill();ctx.restore();
-  ctx.save();ctx.translate(w*0.32,h*0.05);ctx.rotate(-turretRot);ctx.fillStyle=COLORS.purple;ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle=COLORS.charcoal;roundRect(ctx,1,-2.5,13,5,2);ctx.fill();ctx.restore();
-  // Damage overlay
-  if(dmgA>0){ctx.globalAlpha=dmgA;ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.arc(0,0,w/2,0,Math.PI*2);ctx.fill();ctx.strokeStyle=COLORS.berry;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-25+Math.sin(t*5)*5,-15);ctx.lineTo(-15+Math.cos(t*6.5)*3,-5);ctx.stroke();ctx.beginPath();ctx.moveTo(20+Math.cos(t*3.5)*5,5);ctx.lineTo(30+Math.sin(t*5.5)*3,-5);ctx.stroke();ctx.beginPath();ctx.moveTo(-10+Math.sin(t*4)*4,15);ctx.lineTo(5+Math.cos(t*5)*3,8);ctx.stroke();}
-  ctx.restore();
+  ctx.save();ctx.translate(x,y);ctx.scale(1.45,1.45);const t=GAME.time||0,earBob=Math.sin(t*4)*1.5;
+  const damaged=hp!==undefined&&maxHp!==undefined&&hp<maxHp*.5;
+  ctx.fillStyle='rgba(6,21,31,.28)';ctx.beginPath();ctx.ellipse(3,25,43,12,0,0,Math.PI*2);ctx.fill();
+  // Thunder tail and side jam cannons.
+  ctx.beginPath();ctx.moveTo(-8,24);ctx.lineTo(2,24);ctx.lineTo(-4,35);ctx.lineTo(7,33);ctx.lineTo(-5,47);ctx.lineTo(-1,37);ctx.lineTo(-12,38);ctx.closePath();fillAndInk(ctx,COLORS.gold,COLORS.charcoal,2.2);
+  for(const side of [-1,1]){ctx.save();ctx.translate(side*37,8);ctx.rotate(side*Math.sin(t*2)*.12);ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);fillAndInk(ctx,COLORS.coral,COLORS.charcoal,2.3);ctx.fillStyle=COLORS.butter;ctx.beginPath();roundRect(ctx,side<0?-16:-1,-3,17,6,2);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2;ctx.stroke();ctx.restore();}
+
+  const storm=ctx.createLinearGradient(-35,-28,38,30);storm.addColorStop(0,'#a87487');storm.addColorStop(.5,'#8e5a72');storm.addColorStop(1,'#68495f');
+  ctx.beginPath();ctx.moveTo(-39,12);ctx.bezierCurveTo(-48,1,-40,-15,-27,-15);ctx.bezierCurveTo(-29,-30,-8,-38,2,-27);ctx.bezierCurveTo(16,-38,38,-27,34,-12);ctx.bezierCurveTo(49,-8,51,10,39,16);ctx.bezierCurveTo(34,29,15,30,7,23);ctx.bezierCurveTo(-3,35,-23,28,-26,20);ctx.bezierCurveTo(-34,23,-42,19,-39,12);ctx.closePath();fillAndInk(ctx,storm,COLORS.charcoal,3.2);
+  ctx.strokeStyle='rgba(255,240,184,.24)';ctx.lineWidth=4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-27,-13);ctx.quadraticCurveTo(-16,-27,-2,-25);ctx.stroke();
+
+  // Cat ears, cream muzzle and a deliberately crooked crown.
+  ctx.beginPath();ctx.moveTo(-25,-17+earBob);ctx.lineTo(-31,-38+earBob);ctx.lineTo(-11,-27+earBob);ctx.closePath();fillAndInk(ctx,'#9b6b80',COLORS.charcoal,2.6);
+  ctx.beginPath();ctx.moveTo(25,-17-earBob);ctx.lineTo(31,-38-earBob);ctx.lineTo(11,-27-earBob);ctx.closePath();fillAndInk(ctx,'#9b6b80',COLORS.charcoal,2.6);
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.moveTo(-25,-23+earBob);ctx.lineTo(-29,-34+earBob);ctx.lineTo(-17,-27+earBob);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(25,-23-earBob);ctx.lineTo(29,-34-earBob);ctx.lineTo(17,-27-earBob);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.ellipse(0,1,25,22,0,0,Math.PI*2);fillAndInk(ctx,COLORS.butter,COLORS.charcoal,2.5);
+  for(const ex of [-10,10]){ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.ellipse(ex,-5,7.5,9,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.8;ctx.stroke();ctx.fillStyle=damaged?COLORS.coral:COLORS.charcoal;ctx.beginPath();ctx.ellipse(ex+(ex<0?1:-1),-3,3.6,5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(ex-1,-6,1.5,0,Math.PI*2);ctx.fill();}
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2.7;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-17,-15);ctx.lineTo(-6,-11);ctx.moveTo(17,-15);ctx.lineTo(6,-11);ctx.stroke();
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(-3,0);ctx.lineTo(3,0);ctx.closePath();ctx.fill();
+  ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,3);ctx.quadraticCurveTo(-3,8,-7,5);ctx.moveTo(0,3);ctx.quadraticCurveTo(3,8,7,5);ctx.stroke();
+  ctx.strokeStyle=rgba(COLORS.charcoal,.5);ctx.lineWidth=1.5;for(const side of [-1,1]){ctx.beginPath();ctx.moveTo(side*14,5);ctx.lineTo(side*31,1);ctx.moveTo(side*14,9);ctx.lineTo(side*31,12);ctx.stroke();}
+  ctx.beginPath();ctx.moveTo(-11,-31);ctx.lineTo(-13,-43);ctx.lineTo(-5,-38);ctx.lineTo(0,-48);ctx.lineTo(6,-38);ctx.lineTo(14,-44);ctx.lineTo(11,-30);ctx.closePath();fillAndInk(ctx,COLORS.gold,COLORS.charcoal,2.3);
+  ctx.fillStyle=COLORS.coral;ctx.beginPath();ctx.arc(0,-39,2.8,0,Math.PI*2);ctx.fill();
+
+  // Patch stitches and cracks replace the old full-body red damage flash.
+  ctx.strokeStyle=damaged?COLORS.gold:rgba(COLORS.softWhite,.35);ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-31,13);ctx.lineTo(-23,8);ctx.lineTo(-18,15);ctx.moveTo(25,-18);ctx.lineTo(20,-11);ctx.stroke();
+  if(damaged){ctx.strokeStyle=COLORS.coral;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(17,12);ctx.lineTo(23,17);ctx.lineTo(18,23);ctx.lineTo(27,26);ctx.stroke();}
+  if(hp!==undefined&&maxHp!==undefined)drawHpBar(ctx,0,38,66,hp,maxHp);ctx.restore();
 }
 
 function drawPlayerBullet(ctx,x,y){
   const lv=GAME.player?GAME.player.powerLevel||1:1,t=GAME.time||0;
-  let sz=3.5,color=COLORS.gold;if(lv===2){sz=5;color=COLORS.skyBlue;}else if(lv>=3){sz=5.5;color='hsl('+((t*120)%360)+',80%,65%)';}
-  ctx.fillStyle=rgba(color,0.25);ctx.beginPath();ctx.arc(x,y,sz*2,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=rgba(color,0.5);ctx.beginPath();ctx.arc(x,y,sz*1.2,0,Math.PI*2);ctx.fill();
-  drawStar5(ctx,x,y,sz,sz*0.4,color,t*5+x*0.1);
-  ctx.fillStyle=rgba(COLORS.white,0.9);ctx.beginPath();ctx.arc(x,y-sz*0.3,sz*0.35,0,Math.PI*2);ctx.fill();
+  let sz=4,color=COLORS.gold;if(lv===2){sz=4.8;color=COLORS.skyBlue;}else if(lv>=3){sz=5.2;color=Math.floor(t*5+x)%2?COLORS.coral:COLORS.mint;}
+  ctx.save();ctx.translate(x,y);ctx.rotate(t*5+x*.08);
+  ctx.strokeStyle=rgba(color,.48);ctx.lineWidth=2.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(0,sz*.8);ctx.lineTo(0,sz*2.5);ctx.stroke();
+  ctx.fillStyle=rgba(COLORS.butter,.22);ctx.beginPath();ctx.arc(0,0,sz*1.55,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();drawStar5Path(ctx,0,0,sz,sz*.46,0);fillAndInk(ctx,color,COLORS.charcoal,1.15);
+  ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.arc(-sz*.22,-sz*.25,sz*.25,0,Math.PI*2);ctx.fill();ctx.restore();
 }
 
 function drawEnemyBullet(ctx,bullet){
-  const x=bullet.x,y=bullet.y;
-  const sz=bullet._bossBullet?2:1;
+  const x=bullet.x,y=bullet.y,t=GAME.time||0;
+  ctx.save();ctx.translate(x,y);
   if(bullet._homing){
-    // Homing bullet: red with pulsing glow (boss size)
-    const rs=sz*8;const g=ctx.createRadialGradient(x,y,1,x,y,rs);g.addColorStop(0,rgba('#FF4444',0.9));g.addColorStop(0.5,rgba('#FF0000',0.6));g.addColorStop(1,rgba('#FF0000',0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,rs,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#FF8888';ctx.beginPath();ctx.arc(x,y,3.5*sz,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(x-0.5*sz,y-0.5*sz,1.2*sz,0,Math.PI*2);ctx.fill();
+    const pulse=7+Math.sin(t*8)*1.2;ctx.strokeStyle=rgba(COLORS.butter,.62);ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,pulse,0,Math.PI*2);ctx.stroke();
+    ctx.rotate(t*2);ctx.beginPath();drawStar5Path(ctx,0,0,6.2,3.4,0);fillAndInk(ctx,COLORS.coral,COLORS.charcoal,1.6);
+    ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.arc(-1.4,-1.5,1.5,0,Math.PI*2);ctx.fill();
   }else if(bullet._bossBullet){
-    // Boss bullet: larger with glow
-    const g=ctx.createRadialGradient(x,y,1,x,y,10);g.addColorStop(0,rgba(COLORS.hotPink,0.8));g.addColorStop(0.5,rgba(COLORS.hotPink,0.4));g.addColorStop(1,rgba(COLORS.hotPink,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();
-    const m=ctx.createRadialGradient(x-2,y-2,0.5,x,y,5);m.addColorStop(0,COLORS.white);m.addColorStop(0.3,COLORS.hotPink);m.addColorStop(1,COLORS.darkPink);ctx.fillStyle=m;ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(x-1,y-1,1.5,0,Math.PI*2);ctx.fill();
+    if(bullet._expanding){ctx.rotate(t*1.5);for(let i=0;i<4;i++){ctx.rotate(Math.PI/2);ctx.fillStyle=rgba(COLORS.coral,.55);ctx.beginPath();ctx.ellipse(0,-8,2.4,5,0,0,Math.PI*2);ctx.fill();}}
+    ctx.fillStyle=rgba(COLORS.coral,.2);ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);fillAndInk(ctx,COLORS.berry,COLORS.charcoal,1.7);
+    ctx.fillStyle=COLORS.butter;for(const px of [-2,2])for(const py of [-2,2]){ctx.beginPath();ctx.arc(px,py,.75,0,Math.PI*2);ctx.fill();}
+    ctx.strokeStyle=rgba(COLORS.white,.45);ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(-1,-1,3.5,Math.PI,Math.PI*1.5);ctx.stroke();
   }else{
-    const g=ctx.createRadialGradient(x,y,1,x,y,6);g.addColorStop(0,rgba(COLORS.hotPink,0.7));g.addColorStop(1,rgba(COLORS.hotPink,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();
-    const m=ctx.createRadialGradient(x-1,y-1.5,0.5,x,y,3);m.addColorStop(0,COLORS.white);m.addColorStop(0.3,COLORS.hotPink);m.addColorStop(1,COLORS.darkPink);ctx.fillStyle=m;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(x-0.5,y-0.5,1,0,Math.PI*2);ctx.fill();
+    const angle=Math.atan2(bullet.vy,bullet.vx)+Math.PI/2;ctx.rotate(angle);
+    ctx.fillStyle=rgba(COLORS.coral,.22);ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.moveTo(0,-5);ctx.bezierCurveTo(4,-2,4,3,0,4);ctx.bezierCurveTo(-4,3,-4,-2,0,-5);ctx.closePath();fillAndInk(ctx,COLORS.coral,COLORS.charcoal,1.25);
+    ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.arc(-1.1,-1.4,1,0,Math.PI*2);ctx.fill();
   }
+  ctx.restore();
 }
 
 function drawPowerUp(ctx,pu){
-  ctx.save();ctx.translate(pu.x,pu.y);const t=GAME.time||0,bob=Math.sin(t*4)*3;ctx.translate(0,bob);
-  let gc,ic;switch(pu.type){case'spread':gc=COLORS.skyBlue;ic=COLORS.skyBlue;break;case'shield':gc=COLORS.lavender;ic=COLORS.lavender;break;case'heal':gc=COLORS.pink;ic=COLORS.hotPink;break;case'speed':gc=COLORS.gold;ic=COLORS.gold;break;default:gc=COLORS.mint;ic=COLORS.mint;}
-  ctx.fillStyle=rgba(gc,0.2+0.1*Math.sin(t*3));ctx.beginPath();ctx.arc(0,0,16,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(0,0,12,0,Math.PI*2);ctx.fill();ctx.strokeStyle=gc;ctx.lineWidth=2;ctx.stroke();
-  ctx.fillStyle=ic;
+  ctx.save();ctx.translate(pu.x,pu.y);const t=GAME.time||0,bob=Math.sin(t*4+pu.x)*1.4;ctx.translate(0,bob);ctx.rotate(Math.sin(t*2+pu.x)*.05);
+  let gc;switch(pu.type){case'spread':gc=COLORS.skyBlue;break;case'shield':gc=COLORS.mint;break;case'heal':gc=COLORS.coral;break;case'speed':gc=COLORS.gold;break;default:gc=COLORS.mint;}
+  ctx.fillStyle=rgba(gc,.2+Math.sin(t*3)*.04);ctx.beginPath();ctx.arc(0,0,17,0,Math.PI*2);ctx.fill();
+  // Scalloped postal stamp, sized to the 12px collision radius.
+  ctx.beginPath();for(let i=0;i<16;i++){const a=i/16*Math.PI*2-Math.PI/2,r=i%2===0?13:11.3;if(i===0)ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r);else ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}ctx.closePath();fillAndInk(ctx,COLORS.butter,COLORS.charcoal,1.8);
+  ctx.strokeStyle=gc;ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);ctx.stroke();ctx.fillStyle=gc;
   switch(pu.type){
-    case'spread':drawStar5(ctx,-3,0,3,1.3,ic,1,0);drawStar5(ctx,4,-2,3,1.3,ic,1,0);drawStar5(ctx,4,3,3,1.3,ic,1,0);break;
-    case'shield':ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(5.5,-3);ctx.lineTo(5.5,2);ctx.quadraticCurveTo(2.5,6.5,0,7.5);ctx.quadraticCurveTo(-2.5,6.5,-5.5,2);ctx.lineTo(-5.5,-3);ctx.closePath();ctx.fill();break;
-    case'heal':roundRect(ctx,-1.5,-5,3,10,1);ctx.fill();roundRect(ctx,-5,-1.5,10,3,1);ctx.fill();break;
-    case'speed':ctx.beginPath();ctx.moveTo(0,-6.5);ctx.lineTo(-3,0);ctx.lineTo(0,0);ctx.lineTo(-2,6.5);ctx.lineTo(3.5,-1);ctx.lineTo(0,-1);ctx.lineTo(2,-6.5);ctx.closePath();ctx.fill();break;
+    case'spread':drawStar5(ctx,-4,1,3.5,1.5,gc,-.25);drawStar5(ctx,3,-3,3.5,1.5,gc,.2);drawStar5(ctx,4,4,2.7,1.2,gc,.5);break;
+    case'shield':ctx.beginPath();ctx.moveTo(0,-7);ctx.bezierCurveTo(6,-5,7,-3,7,1);ctx.quadraticCurveTo(4,7,0,9);ctx.quadraticCurveTo(-4,7,-7,1);ctx.bezierCurveTo(-7,-3,-6,-5,0,-7);ctx.closePath();ctx.fill();ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.moveTo(0,-4);ctx.lineTo(0,5);ctx.strokeStyle=COLORS.softWhite;ctx.lineWidth=1.5;ctx.stroke();break;
+    case'heal':drawHeart(ctx,0,-1,11,gc,1);ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.arc(-2.5,-2.8,1.4,0,Math.PI*2);ctx.fill();break;
+    case'speed':ctx.beginPath();ctx.moveTo(4,-8);ctx.bezierCurveTo(-7,-5,-8,4,-3,8);ctx.bezierCurveTo(3,4,7,-2,4,-8);ctx.closePath();ctx.fill();ctx.strokeStyle=COLORS.softWhite;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(2,-5);ctx.lineTo(-4,6);ctx.moveTo(-1,0);ctx.lineTo(4,0);ctx.stroke();break;
   }
-  ctx.fillStyle=rgba(COLORS.white,0.5);ctx.beginPath();ctx.arc(-3,-3,3.5,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=rgba(COLORS.white,.5);ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.arc(-2,-2,7,Math.PI,Math.PI*1.45);ctx.stroke();
   ctx.restore();
 }
 
@@ -1951,34 +1926,15 @@ function drawSingleBeam(ctx,angle,glowColor){
   const p=GAME.player;if(!p||!p.active)return;
   const beamLen=Math.sqrt(CANVAS_W*CANVAS_W+CANVAS_H*CANVAS_H);
   const ex=p.x+Math.sin(angle)*beamLen,ey=p.y-Math.cos(angle)*beamLen;
-  const t=GAME.time||0;
-  // Outer glow
-  const glow=ctx.createLinearGradient(p.x,p.y,ex,ey);
-  glow.addColorStop(0,'rgba(255,80,80,0)');glow.addColorStop(0.1,'rgba(255,60,60,0.25)');
-  glow.addColorStop(0.5,'rgba(255,30,30,0.4)');glow.addColorStop(0.9,'rgba(255,60,60,0.25)');
-  glow.addColorStop(1,'rgba(255,80,80,0)');
-  ctx.strokeStyle=glow;ctx.lineWidth=18;ctx.shadowColor='#FF2222';ctx.shadowBlur=20;
-  ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
-  // Mid glow
-  const mid=ctx.createLinearGradient(p.x,p.y,ex,ey);
-  mid.addColorStop(0,'rgba(255,180,180,0)');mid.addColorStop(0.1,'rgba(255,150,150,0.35)');
-  mid.addColorStop(0.5,'rgba(255,255,255,0.8)');mid.addColorStop(0.9,'rgba(255,150,150,0.35)');
-  mid.addColorStop(1,'rgba(255,180,180,0)');
-  ctx.strokeStyle=mid;ctx.lineWidth=6;ctx.shadowColor='#FFFFFF';ctx.shadowBlur=10;
-  ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
-  // Core
-  ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2;
-  ctx.shadowColor='#FFFFFF';ctx.shadowBlur=5;
-  ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
-  // Sparks
-  const segs=Math.floor(beamLen/30);
-  for(let s=1;s<segs;s++){
-    const sx=p.x+(ex-p.x)*s/segs,sy=p.y+(ey-p.y)*s/segs;
-    if(Math.random()<0.2){
-      ctx.fillStyle=rgba('#FF8888',0.4+Math.random()*0.5);
-      ctx.beginPath();ctx.arc(sx+(Math.random()-0.5)*10,sy+(Math.random()-0.5)*10,1+Math.random()*1.5,0,Math.PI*2);ctx.fill();
-    }
-  }
+  const t=GAME.time||0,dx=ex-p.x,dy=ey-p.y,len=Math.sqrt(dx*dx+dy*dy)||1,nx=-dy/len,ny=dx/len;
+  ctx.save();ctx.lineCap='round';
+  ctx.strokeStyle=rgba(COLORS.coral,.18);ctx.lineWidth=18;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
+  ctx.strokeStyle=rgba(COLORS.coral,.72);ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.stroke();
+  // Offset cream strokes create a dry-brush center instead of a neon tube.
+  for(let i=-1;i<=1;i++){const off=i*1.6+Math.sin(t*9+i)*.7;ctx.strokeStyle=i===0?rgba(COLORS.softWhite,.9):rgba(COLORS.gold,.58);ctx.lineWidth=i===0?2.6:1.4;ctx.beginPath();ctx.moveTo(p.x+nx*off,p.y+ny*off);ctx.lineTo(ex+nx*off,ey+ny*off);ctx.stroke();}
+  const segs=Math.floor(beamLen/34),phase=Math.floor(t*9);
+  for(let s=1;s<segs;s++){if((s+phase)%4!==0)continue;const sx=p.x+dx*s/segs,sy=p.y+dy*s/segs,off=Math.sin(s*2.1+t*5)*7;ctx.fillStyle=s%2?COLORS.gold:COLORS.coral;ctx.beginPath();ctx.ellipse(sx+nx*off,sy+ny*off,2.4,1.2,angle,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
 }
 // 激光扫射渲染 — dual beams from left, opposite rotation
 function drawLaserSweep(ctx){
@@ -1986,13 +1942,10 @@ function drawLaserSweep(ctx){
   ctx.save();
   drawSingleBeam(ctx,GAME._laserSweepAngle1||0);
   drawSingleBeam(ctx,GAME._laserSweepAngle2||0);
-  // Origin burst at player
-  const t=GAME.time||0;
-  const ob=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,22);
-  ob.addColorStop(0,'rgba(255,255,255,0.9)');ob.addColorStop(0.2,'rgba(255,100,100,0.6)');
-  ob.addColorStop(1,'rgba(255,0,0,0)');
-  ctx.fillStyle=ob;ctx.beginPath();ctx.arc(p.x,p.y,22+Math.sin(t*15)*3,0,Math.PI*2);ctx.fill();
-  ctx.shadowBlur=0;ctx.restore();
+  // Painted rosette at the beam origin.
+  const t=GAME.time||0;ctx.translate(p.x,p.y);ctx.rotate(t*2);
+  for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.fillStyle=rgba(i%2?COLORS.gold:COLORS.coral,.55);ctx.beginPath();ctx.ellipse(0,-13-Math.sin(t*12)*2,3.2,7,0,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle=COLORS.softWhite;ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.fill();ctx.strokeStyle=COLORS.charcoal;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
 }
 
 // ============================================================================
@@ -2074,7 +2027,10 @@ function render(){
   for(let i=0;i<GAME.lightningChains.length;i++)drawLightningChain(ctx,GAME.lightningChains[i]);
   if(GAME.activeEffect==='sweep')drawSweepEffect(ctx);
   if(GAME.activeEffect==='meteor')drawMeteorEffect(ctx);
-  if(GAME.activeEffect==='laserSweep')drawLaserSweep(ctx);
+  if(GAME.activeEffect==='laserSweep'){
+    drawLaserSweep(ctx);
+    if(GAME.player&&GAME.player.active)drawPlayer(ctx,GAME.player.x,GAME.player.y);
+  }
   // HUD
   drawHUD(ctx);drawComboTexts(ctx);drawScreenFlash(ctx);drawBossWarning(ctx);drawSkillCooldowns(ctx);
   // Pause overlay
@@ -2087,22 +2043,7 @@ function render(){
 function drawPreviewShip(){
   const c=document.getElementById('previewCanvas');if(!c)return;
   const ctx=c.getContext('2d');ctx.clearRect(0,0,160,160);
-  // Mini version of player ship
-  ctx.save();ctx.translate(80,88);ctx.scale(2,2);
-  // Engine
-  ctx.fillStyle=rgba(COLORS.mint,0.7);ctx.beginPath();ctx.arc(0,16,5,0,Math.PI*2);ctx.fill();
-  // Body
-  const bg=ctx.createRadialGradient(-1,-3,1,0,0,14);bg.addColorStop(0,COLORS.softWhite);bg.addColorStop(0.3,COLORS.blushPink);bg.addColorStop(0.7,COLORS.pink);bg.addColorStop(1,COLORS.roseGold);ctx.fillStyle=bg;
-  ctx.beginPath();ctx.moveTo(0,-15);ctx.bezierCurveTo(12,-14,14,-4,13,6);ctx.bezierCurveTo(11,13,6,15,0,15);ctx.bezierCurveTo(-6,15,-11,13,-13,6);ctx.bezierCurveTo(-14,-4,-12,-14,0,-15);ctx.closePath();ctx.fill();
-  // Ears
-  ctx.fillStyle=COLORS.hotPink;ctx.beginPath();ctx.moveTo(-10,-7);ctx.lineTo(-14,-17);ctx.lineTo(-5,-13);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(10,-7);ctx.lineTo(14,-17);ctx.lineTo(5,-13);ctx.closePath();ctx.fill();
-  // Eyes
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.ellipse(-3.5,-3,4,4.5,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(3.5,-3,4,4.5,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.darkPurple;ctx.beginPath();ctx.arc(-3,-2.5,2.2,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(3,-2.5,2.2,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=COLORS.white;ctx.beginPath();ctx.arc(-4,-4.5,1,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(2,-4.5,1,0,Math.PI*2);ctx.fill();
-  // Blush
-  ctx.fillStyle=rgba(COLORS.coral,0.4);ctx.beginPath();ctx.ellipse(-5,1,2.5,1.8,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(5,1,2.5,1.8,0,0,Math.PI*2);ctx.fill();
-  ctx.restore();
+  drawPlayerArt(ctx,80,85,2.05,performance.now()/1000,2);
 }
 
 // Click handlers
