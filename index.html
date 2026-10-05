@@ -1340,7 +1340,7 @@ function applyPowerUp(pu){
 
 function addScore(base){
   if(GAME.gameState!=='playing')return;
-  GAME.combo=(GAME.combo||0)+1;GAME.comboTimer=1.5;
+  GAME.combo=(GAME.combo||0)+1;GAME.comboTimer=1.5;GAME._comboPop=GAME.time; // badge pop (visual)
   if(GAME.combo>GAME.maxCombo)GAME.maxCombo=GAME.combo;
   let mult=1;if(GAME.combo>=100)mult=10;else if(GAME.combo>=50)mult=5;else if(GAME.combo>=25)mult=3;else if(GAME.combo>=10)mult=2;
   GAME.score+=Math.floor(base*mult);
@@ -1359,7 +1359,17 @@ function checkMilestone(c){
   else if(c>=10&&!m[10]){m[10]=true;fireMilestone('不错!',10);}
 }
 
-function fireMilestone(text,val){spawnComboText(text,CANVAS_W/2,300);sfxCombo(val);}
+function fireMilestone(text,val){
+  // Tier color/size ramps with the milestone; burst particles + light shake for punch.
+  const col=val>=100?COLORS.lavender:val>=50?COLORS.coral:val>=25?COLORS.gold:COLORS.mint;
+  const size=val>=100?32:val>=50?27:val>=25?23:21;
+  spawnComboText(text,CANVAS_W/2,300,size,col);
+  sfxCombo(val);
+  const mx=CANVAS_W/2,my=300;
+  const rp=acquireParticle(mx,my,0,0,col,12,0.55);if(rp)rp.isRing=true;
+  for(let i=0;i<10;i++){const a=Math.random()*Math.PI*2,spd=90+Math.random()*140;const p=acquireParticle(mx,my,Math.cos(a)*spd,Math.sin(a)*spd,i%3===0?COLORS.white:col,2.5+Math.random()*3,0.35+Math.random()*0.4);if(p&&i%3===1)p.isSpark=true;}
+  GAME.screenShake=Math.max(GAME.screenShake,5);GAME.screenShakeDuration=Math.max(GAME.screenShakeDuration,0.2);
+}
 function updateComboTimer(dt){if(GAME.gameState!=='playing')return;if(GAME.comboTimer>0){GAME.comboTimer-=dt;if(GAME.comboTimer<=0){GAME.comboTimer=0;GAME.combo=0;GAME._comboMilestonesHit={};}}}
 
 function checkPlayerDeath(dt){
@@ -1861,8 +1871,35 @@ function drawHUD(ctx){
   // Wave
   drawPaintPanel(ctx,354,8,92,30,'rgba(255,122,60,0.94)',COLORS.gold);
   ctx.fillStyle=COLORS.softWhite;ctx.font='bold 14px '+uiFont;ctx.textAlign='center';ctx.fillText('第 '+GAME.wave+' 波',400,28);
-  // Combo
-  if(GAME.combo>5){const ca=0.7+0.3*Math.sin(GAME.time*6);ctx.fillStyle=rgba(COLORS.gold,ca);ctx.font='bold 14px '+uiFont;ctx.textAlign='right';ctx.fillText(GAME.combo+'x COMBO',694,66);}
+  // Combo badge: chamfered tier-colored plate with count, multiplier and timer bar.
+  if(GAME.combo>5){
+    const c=GAME.combo,t=GAME.time||0;
+    const tier=c>=100?4:c>=50?3:c>=25?2:c>=10?1:0;
+    const tc=[COLORS.gold,COLORS.mint,COLORS.skyBlue,COLORS.coral,COLORS.hostile][tier];
+    const mult=c>=100?10:c>=50?5:c>=25?3:c>=10?2:1;
+    const age=t-(GAME._comboPop||0);
+    const pop=age<0.28?1+Math.sin(Math.max(0,age)/0.28*Math.PI)*0.22:1;
+    const bw=96,bh=30,bx=658,by=74,ch=7;
+    ctx.save();ctx.translate(bx,by);ctx.scale(pop,pop);
+    // Badge plate
+    poly(ctx,[[-bw/2+ch,-bh/2],[bw/2-ch,-bh/2],[bw/2,-bh/2+ch],[bw/2,bh/2-ch],[bw/2-ch,bh/2],[-bw/2+ch,bh/2],[-bw/2,bh/2-ch],[-bw/2,-bh/2+ch]]);
+    ctx.fillStyle=rgba(tc,0.95);ctx.fill();
+    ctx.strokeStyle='#000000';ctx.lineWidth=2.5;ctx.lineJoin='miter';ctx.stroke();
+    // Count + labels
+    ctx.textAlign='left';ctx.fillStyle='#0B1626';ctx.font='bold 17px '+uiFont;
+    ctx.fillText(c+'x',-bw/2+9,6);
+    ctx.textAlign='right';ctx.font='bold 8px '+uiFont;
+    ctx.fillText('COMBO',bw/2-8,-3);
+    ctx.font='bold 11px '+uiFont;
+    ctx.fillText('SCORE ×'+mult,bw/2-8,9);
+    ctx.restore();
+    // Combo timer bar (drains over 1.5s)
+    const ratio=Math.max(0,Math.min(1,GAME.comboTimer/1.5));
+    const tx=bx-bw/2,ty=by+bh/2+3,tw=bw,th=5;
+    ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(tx,ty,tw,th);
+    if(ratio>0){ctx.fillStyle=ratio<0.3?COLORS.hostile:COLORS.softWhite;ctx.fillRect(tx,ty,tw*ratio,th);}
+    ctx.strokeStyle='#000000';ctx.lineWidth=1;ctx.strokeRect(tx,ty,tw,th);
+  }
   // Active auto-effect name
   if(GAME.activeEffect){const ea=0.6+0.4*Math.sin(GAME.time*5);ctx.fillStyle=rgba(COLORS.gold,ea);ctx.font='bold 13px '+uiFont;ctx.textAlign='center';ctx.fillText('✦ '+(GAME.effectDisplayName||GAME.activeEffect)+' ✦',CANVAS_W/2,CANVAS_H-43);}
   // === Ability Status Indicators ===
@@ -1881,16 +1918,37 @@ function drawHUD(ctx){
   }
 }
 
-function spawnComboText(text,x,y){
-  GAME.comboTexts.push({text:text,x:x,y:y,life:1.2,maxLife:1.2});
+function spawnComboText(text,x,y,size,color){
+  GAME.comboTexts.push({text:text,x:x,y:y,life:1.2,maxLife:1.2,size:size||20,color:color||null});
 }
 function drawComboTexts(ctx){
   for(let i=0;i<GAME.comboTexts.length;i++){
     const ct=GAME.comboTexts[i];if(ct.life<=0)continue;
-    const r=ct.life/ct.maxLife,alpha=r<0.3?r/0.3:1,yOff=(1-r)*35;
-    ctx.textAlign='center';ctx.font='bold 20px "Segoe UI","Microsoft YaHei",sans-serif';
-    ctx.fillStyle=rgba('#000000',alpha*0.7);ctx.fillText(ct.text,ct.x+2,ct.y-yOff+2);
-    ctx.fillStyle=rgba(COLORS.gold,alpha);ctx.fillText(ct.text,ct.x,ct.y-yOff);
+    const r=ct.life/ct.maxLife,alpha=r<0.3?r/0.3:1,yOff=(1-r)*40;
+    const sz=ct.size||20;
+    const pop=r>0.86?0.55+(1-r)/0.14*0.45:1;
+    ctx.save();
+    ctx.translate(ct.x,ct.y-yOff);ctx.scale(pop,pop);
+    ctx.font='bold '+sz+'px "Segoe UI","Microsoft YaHei",sans-serif';
+    ctx.textAlign='center';
+    if(ct.color){
+      // Milestone: chamfered color banner with black outline and dark text.
+      const w=ctx.measureText(ct.text).width+30,h=sz+16,ch=6;
+      ctx.globalAlpha=alpha;
+      poly(ctx,[[-w/2+ch,-h/2],[w/2-ch,-h/2],[w/2,-h/2+ch],[w/2,h/2-ch],[w/2-ch,h/2],[-w/2+ch,h/2],[-w/2,h/2-ch],[-w/2,-h/2+ch]]);
+      ctx.fillStyle=ct.color;ctx.fill();
+      ctx.strokeStyle='#000000';ctx.lineWidth=3;ctx.lineJoin='miter';ctx.stroke();
+      ctx.fillStyle='#0B1626';ctx.fillText(ct.text,0,sz*0.36);
+    }else{
+      // Default: gold with 8-direction black outline.
+      const dirs=[[-2,-2],[2,-2],[-2,2],[2,2],[0,-2],[0,2],[-2,0],[2,0]];
+      ctx.fillStyle=rgba('#000000',alpha*0.85);
+      for(const d of dirs)ctx.fillText(ct.text,d[0],d[1]);
+      ctx.fillStyle=rgba(COLORS.gold,alpha);
+      ctx.fillText(ct.text,0,0);
+    }
+    ctx.globalAlpha=1;
+    ctx.restore();
   }
 }
 
