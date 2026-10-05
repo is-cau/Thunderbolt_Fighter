@@ -90,10 +90,18 @@ body { display:flex; justify-content:center; align-items:center; }
 #start-screen h1 {
   max-width:520px; color:#F2EFE8; font-family:'YouYuan','STHupo','Microsoft YaHei',sans-serif;
   font-size:clamp(52px,7vw,86px); line-height:.96; letter-spacing:0;
-  -webkit-text-stroke:3px #000000;
-  text-shadow:5px 5px 0 #000000;
+  text-shadow:
+    -2px -2px 0 #000000, 2px -2px 0 #000000, -2px 2px 0 #000000, 2px 2px 0 #000000,
+    0 -2px 0 #000000, 0 2px 0 #000000, -2px 0 0 #000000, 2px 0 0 #000000,
+    6px 6px 0 #000000;
 }
-#start-screen h1 span { display:block; color:#FFD23F; -webkit-text-stroke:3px #000000; text-shadow:5px 5px 0 #000000; }
+#start-screen h1 span {
+  display:block; color:#FFD23F;
+  text-shadow:
+    -2px -2px 0 #000000, 2px -2px 0 #000000, -2px 2px 0 #000000, 2px 2px 0 #000000,
+    0 -2px 0 #000000, 0 2px 0 #000000, -2px 0 0 #000000, 2px 0 0 #000000,
+    6px 6px 0 #000000;
+}
 #start-screen .subtitle {
   margin-top:13px; color:rgba(242,239,232,.8); font-size:14px;
   font-weight:800; letter-spacing:3px; text-transform:uppercase;
@@ -108,11 +116,11 @@ body { display:flex; justify-content:center; align-items:center; }
 .launch-bay { display:flex; flex-direction:column; align-items:center; position:relative; }
 .mascot-stage {
   position:relative; width:210px; height:210px; display:grid; place-items:center;
-  background:#12263F;
+  background:#1E3A5F;
   clip-path:polygon(29% 0, 71% 0, 100% 29%, 100% 71%, 71% 100%, 29% 100%, 0 71%, 0 29%);
 }
 .mascot-stage::before {
-  content:''; position:absolute; inset:-6px; z-index:-1; background:#000000;
+  content:''; position:absolute; inset:-6px; z-index:-1; background:#35D0C0;
   clip-path:polygon(29% 0, 71% 0, 100% 29%, 100% 71%, 71% 100%, 29% 100%, 0 71%, 0 29%);
 }
 .mascot-stage::after { content:none; }
